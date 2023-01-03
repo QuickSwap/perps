@@ -3,16 +3,10 @@
 pragma solidity 0.6.12;
 
 import "./interfaces/ITimelockTarget.sol";
-import "./interfaces/IHandlerTarget.sol";
 import "../access/interfaces/IAdmin.sol";
 import "../core/interfaces/IVaultPriceFeed.sol";
 import "../oracle/interfaces/IFastPriceFeed.sol";
-import "../referrals/interfaces/IReferralStorage.sol";
-import "../tokens/interfaces/IYieldToken.sol";
 import "../tokens/interfaces/IBaseToken.sol";
-import "../tokens/interfaces/IMintable.sol";
-import "../tokens/interfaces/IUSDQ.sol";
-import "../staking/interfaces/IVester.sol";
 
 import "../libraries/math/SafeMath.sol";
 import "../libraries/token/IERC20.sol";
@@ -100,20 +94,12 @@ contract PriceFeedTimelock {
         buffer = _buffer;
     }
 
-    function setIsAmmEnabled(address _priceFeed, bool _isEnabled) external onlyAdmin {
-        IVaultPriceFeed(_priceFeed).setIsAmmEnabled(_isEnabled);
-    }
-
     function setIsSecondaryPriceEnabled(address _priceFeed, bool _isEnabled) external onlyAdmin {
         IVaultPriceFeed(_priceFeed).setIsSecondaryPriceEnabled(_isEnabled);
     }
 
     function setMaxStrictPriceDeviation(address _priceFeed, uint256 _maxStrictPriceDeviation) external onlyAdmin {
         IVaultPriceFeed(_priceFeed).setMaxStrictPriceDeviation(_maxStrictPriceDeviation);
-    }
-
-    function setUseV2Pricing(address _priceFeed, bool _useV2Pricing) external onlyAdmin {
-        IVaultPriceFeed(_priceFeed).setUseV2Pricing(_useV2Pricing);
     }
 
     function setAdjustment(address _priceFeed, address _token, bool _isAdditive, uint256 _adjustmentBps) external onlyKeeperAndAbove {

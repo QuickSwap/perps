@@ -14,4 +14,8 @@ interface IVaultUtils {
     function getSellUsdqFeeBasisPoints(address _token, uint256 _usdqAmount) external view returns (uint256);
     function getSwapFeeBasisPoints(address _tokenIn, address _tokenOut, uint256 _usdqAmount) external view returns (uint256);
     function getFeeBasisPoints(address _token, uint256 _usdqDelta, uint256 _feeBasisPoints, uint256 _taxBasisPoints, bool _increment) external view returns (uint256);
+    function getMaxAmountIn(
+        address _tokenIn,
+        address _tokenOut
+    ) external view returns (uint256);
 }

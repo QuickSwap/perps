@@ -15,6 +15,7 @@ interface IVault {
     function router() external view returns (address);
     function usdq() external view returns (address);
     function gov() external view returns (address);
+    function vaultUtils() external view returns (IVaultUtils);
 
     function whitelistedTokenCount() external view returns (uint256);
     function maxLeverage() external view returns (uint256);

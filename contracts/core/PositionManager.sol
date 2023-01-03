@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.6.0;
+pragma solidity ^0.6.12;
 
 import "./interfaces/IRouter.sol";
 import "./interfaces/IVault.sol";
@@ -10,21 +10,26 @@ import "../peripherals/interfaces/ITimelock.sol";
 import "./BasePositionManager.sol";
 
 contract PositionManager is BasePositionManager {
-
     address public orderBook;
     bool public inLegacyMode;
 
     bool public shouldValidateIncreaseOrder = true;
+    uint256 public minStayingOpenTime = 900; // 15 min
+    
 
-    mapping (address => bool) public isOrderKeeper;
-    mapping (address => bool) public isPartner;
-    mapping (address => bool) public isLiquidator;
+    mapping(address => bool) public isOrderKeeper;
+    mapping(address => bool) public isPartner;
+    mapping(address => bool) public isLiquidator;
+    mapping(address => uint256) public partnerMinStayingOpenTime;
 
     event SetOrderKeeper(address indexed account, bool isActive);
     event SetLiquidator(address indexed account, bool isActive);
     event SetPartner(address account, bool isActive);
+    event SetOrderBook(address orderBook);
     event SetInLegacyMode(bool inLegacyMode);
     event SetShouldValidateIncreaseOrder(bool shouldValidateIncreaseOrder);
+    event SetMinStayingOpenTime(uint256 _minStayingOpenTime);
+    event SetPartnerMinStayingOpenTime(address account, uint256 minTime);
 
     modifier onlyOrderKeeper() {
         require(isOrderKeeper[msg.sender], "PositionManager: forbidden");
@@ -62,9 +67,27 @@ contract PositionManager is BasePositionManager {
         emit SetLiquidator(_account, _isActive);
     }
 
+    function setPartnerMinStayingOpenTime(address _account, uint256 _minTime) external onlyAdmin {
+        partnerMinStayingOpenTime[_account] = _minTime;
+        emit SetPartnerMinStayingOpenTime(_account, _minTime);
+    }
+
     function setPartner(address _account, bool _isActive) external onlyAdmin {
         isPartner[_account] = _isActive;
         emit SetPartner(_account, _isActive);
+    }
+
+
+    function setOrderBook(address _orderBook) external onlyAdmin {
+        orderBook = _orderBook;
+        emit SetOrderBook(_orderBook);
+    }
+
+    function setMinStayingOpenTime(
+        uint256 _minStayingOpenTime
+    ) external onlyAdmin {
+        minStayingOpenTime = _minStayingOpenTime;
+        emit SetMinStayingOpenTime(_minStayingOpenTime);
     }
 
     function setInLegacyMode(bool _inLegacyMode) external onlyAdmin {
@@ -84,9 +107,12 @@ contract PositionManager is BasePositionManager {
         uint256 _minOut,
         uint256 _sizeDelta,
         bool _isLong,
-        uint256 _price
+        uint256 _price,
+        bytes32 _referralCode
     ) external nonReentrant onlyPartnersOrLegacyMode {
         require(_path.length == 1 || _path.length == 2, "PositionManager: invalid _path.length");
+
+        _setTraderReferralCode(_referralCode);
 
         if (_amountIn > 0) {
             if (_path.length == 1) {
@@ -109,10 +135,13 @@ contract PositionManager is BasePositionManager {
         uint256 _minOut,
         uint256 _sizeDelta,
         bool _isLong,
-        uint256 _price
+        uint256 _price,
+        bytes32 _referralCode
     ) external payable nonReentrant onlyPartnersOrLegacyMode {
         require(_path.length == 1 || _path.length == 2, "PositionManager: invalid _path.length");
         require(_path[0] == weth, "PositionManager: invalid _path");
+
+        _setTraderReferralCode(_referralCode);
 
         if (msg.value > 0) {
             _transferInETH();
@@ -139,6 +168,8 @@ contract PositionManager is BasePositionManager {
         address _receiver,
         uint256 _price
     ) external nonReentrant onlyPartnersOrLegacyMode {
+        _validatePositionTime(msg.sender, _collateralToken, _indexToken, _isLong);
+
         _decreasePosition(msg.sender, _collateralToken, _indexToken, _collateralDelta, _sizeDelta, _isLong, _receiver, _price);
     }
 
@@ -152,6 +183,7 @@ contract PositionManager is BasePositionManager {
         uint256 _price
     ) external nonReentrant onlyPartnersOrLegacyMode {
         require(_collateralToken == weth, "PositionManager: invalid _collateralToken");
+       _validatePositionTime(msg.sender, _collateralToken, _indexToken, _isLong);
 
         uint256 amountOut = _decreasePosition(msg.sender, _collateralToken, _indexToken, _collateralDelta, _sizeDelta, _isLong, address(this), _price);
         _transferOutETHWithGasLimitIgnoreFail(amountOut, _receiver);
@@ -168,6 +200,7 @@ contract PositionManager is BasePositionManager {
         uint256 _minOut
     ) external nonReentrant onlyPartnersOrLegacyMode {
         require(_path.length == 2, "PositionManager: invalid _path.length");
+        _validatePositionTime(msg.sender, _path[0], _indexToken, _isLong);
 
         uint256 amount = _decreasePosition(msg.sender, _path[0], _indexToken, _collateralDelta, _sizeDelta, _isLong, address(this), _price);
         IERC20(_path[0]).safeTransfer(vault, amount);
@@ -186,6 +219,7 @@ contract PositionManager is BasePositionManager {
     ) external nonReentrant onlyPartnersOrLegacyMode {
         require(_path.length == 2, "PositionManager: invalid _path.length");
         require(_path[_path.length - 1] == weth, "PositionManager: invalid _path");
+        _validatePositionTime(msg.sender, _path[0], _indexToken, _isLong);
 
         uint256 amount = _decreasePosition(msg.sender, _path[0], _indexToken, _collateralDelta, _sizeDelta, _isLong, address(this), _price);
         IERC20(_path[0]).safeTransfer(vault, amount);
@@ -271,6 +305,11 @@ contract PositionManager is BasePositionManager {
 
         _emitDecreasePositionReferral(_account, sizeDelta);
     }
+    function _setTraderReferralCode(bytes32 _referralCode) internal {
+        if (_referralCode != bytes32(0) && referralStorage != address(0)) {
+            IReferralStorage(referralStorage).setTraderReferralCode(msg.sender, _referralCode);
+        }
+    }
 
     function _validateIncreaseOrder(address _account, uint256 _orderIndex) internal view {
         (
@@ -310,5 +349,17 @@ contract PositionManager is BasePositionManager {
         uint256 nextLeverageWithBuffer = nextSize.mul(BASIS_POINTS_DIVISOR + increasePositionBufferBps).div(nextCollateral);
 
         require(nextLeverageWithBuffer >= prevLeverage, "PositionManager: long leverage decrease");
+    }
+    function _validatePositionTime(
+        address _account,
+        address _collateralToken,
+        address _indexToken,
+        bool _isLong
+    ) private view{
+        IVault _vault = IVault(vault);
+        (uint256 size, , , , , , , uint lastIncreasedTime) = _vault.getPosition(_account, _collateralToken, _indexToken, _isLong);
+        require(size > 0, "PositionManager: empty position");
+        uint256 minDelayTime = partnerMinStayingOpenTime[_account]>0 ? partnerMinStayingOpenTime[_account] : minStayingOpenTime;
+        require(lastIncreasedTime.add(minDelayTime) <= block.timestamp, "PositionManager: min delay not yet passed");
     }
 }

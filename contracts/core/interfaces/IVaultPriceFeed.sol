@@ -50,7 +50,7 @@ interface IVaultPriceFeed {
         bool _isStrictStable
     ) external;
 
-
+    function getLatestPrimaryPrice(address _token) external view returns (uint256);
 
 
 }

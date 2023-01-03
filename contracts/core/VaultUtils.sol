@@ -26,6 +26,8 @@ contract VaultUtils is IVaultUtils, Governable {
 
     uint256 public constant BASIS_POINTS_DIVISOR = 10000;
     uint256 public constant FUNDING_RATE_PRECISION = 1000000;
+    uint256 public constant PRICE_PRECISION = 10**30;
+    uint256 public constant USDQ_DECIMALS = 18;
 
     constructor(IVault _vault) public {
         vault = _vault;
@@ -168,4 +170,48 @@ contract VaultUtils is IVaultUtils, Governable {
         uint256 taxBps = _taxBasisPoints.mul(averageDiff).div(targetAmount);
         return _feeBasisPoints.add(taxBps);
     }
+
+    function getMaxAmountIn(
+        address _tokenIn,
+        address _tokenOut
+    ) external override view returns (uint256) {
+        uint256 priceIn = vault.getMinPrice(_tokenIn);
+        uint256 priceOut = vault.getMaxPrice(_tokenOut);
+
+        uint256 tokenInDecimals = vault.tokenDecimals(_tokenIn);
+        uint256 tokenOutDecimals = vault.tokenDecimals(_tokenOut);
+
+        uint256 amountIn;
+
+        {
+            uint256 poolAmount = vault.poolAmounts(_tokenOut);
+            uint256 reservedAmount = vault.reservedAmounts(_tokenOut);
+            uint256 bufferAmount = vault.bufferAmounts(_tokenOut);
+            uint256 subAmount = reservedAmount > bufferAmount ? reservedAmount : bufferAmount;
+            if (subAmount >= poolAmount) {
+                return 0;
+            }
+            uint256 availableAmount = poolAmount.sub(subAmount);
+            amountIn = availableAmount.mul(priceOut).div(priceIn).mul(10**tokenInDecimals).div(10**tokenOutDecimals);
+        }
+
+        uint256 maxUsdqAmount = vault.maxUsdqAmounts(_tokenIn);
+
+        if (maxUsdqAmount != 0) {
+            if (maxUsdqAmount < vault.usdqAmounts(_tokenIn)) {
+                return 0;
+            }
+
+            uint256 maxAmountIn = maxUsdqAmount.sub(vault.usdqAmounts(_tokenIn));
+            maxAmountIn = maxAmountIn.mul(10**tokenInDecimals).div(10**USDQ_DECIMALS);
+            maxAmountIn = maxAmountIn.mul(PRICE_PRECISION).div(priceIn);
+
+            if (amountIn > maxAmountIn) {
+                return maxAmountIn;
+            }
+        }
+
+        return amountIn;
+    }
+
 }

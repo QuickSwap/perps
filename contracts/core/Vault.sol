@@ -40,7 +40,7 @@ contract Vault is ReentrancyGuard, IVault {
     bool public override isSwapEnabled = true;
     bool public override isLeverageEnabled = true;
 
-    IVaultUtils public vaultUtils;
+    IVaultUtils public override vaultUtils;
 
     address public errorController;
 

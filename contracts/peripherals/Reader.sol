@@ -9,9 +9,7 @@ import "../core/interfaces/IVault.sol";
 import "../core/interfaces/IVaultPriceFeed.sol";
 import "../tokens/interfaces/IYieldTracker.sol";
 import "../tokens/interfaces/IYieldToken.sol";
-import "../amm/interfaces/IPancakeFactory.sol";
 
-import "../staking/interfaces/IVester.sol";
 import "../access/Governable.sol";
 
 contract Reader is Governable {
@@ -50,7 +48,7 @@ contract Reader is Governable {
                 return 0;
             }
             uint256 availableAmount = poolAmount.sub(subAmount);
-            amountIn = availableAmount.mul(priceOut).div(priceIn).mul(10 ** tokenInDecimals).div(10 ** tokenOutDecimals);
+            amountIn = availableAmount.mul(priceOut).div(priceIn).mul(10**tokenInDecimals).div(10**tokenOutDecimals);
         }
 
         uint256 maxUsdqAmount = _vault.maxUsdqAmounts(_tokenIn);
@@ -61,7 +59,7 @@ contract Reader is Governable {
             }
 
             uint256 maxAmountIn = maxUsdqAmount.sub(_vault.usdqAmounts(_tokenIn));
-            maxAmountIn = maxAmountIn.mul(10 ** tokenInDecimals).div(10 ** USDQ_DECIMALS);
+            maxAmountIn = maxAmountIn.mul(10**tokenInDecimals).div(10**USDQ_DECIMALS);
             maxAmountIn = maxAmountIn.mul(PRICE_PRECISION).div(priceIn);
 
             if (amountIn > maxAmountIn) {
@@ -125,7 +123,7 @@ contract Reader is Governable {
         uint256 tokenInDecimals = _vault.tokenDecimals(_tokenIn);
 
         uint256 usdqAmount = _amountIn.mul(priceIn).div(PRICE_PRECISION);
-        usdqAmount = usdqAmount.mul(10 ** USDQ_DECIMALS).div(10 ** tokenInDecimals);
+        usdqAmount = usdqAmount.mul(10**USDQ_DECIMALS).div(10**tokenInDecimals);
 
         bool isStableSwap = _vault.stableTokens(_tokenIn) && _vault.stableTokens(_tokenOut);
         uint256 baseBps = isStableSwap ? _vault.stableSwapFeeBasisPoints() : _vault.swapFeeBasisPoints();
@@ -166,38 +164,12 @@ contract Reader is Governable {
         return amounts;
     }
 
-    function getVestingInfo(address _account, address[] memory _vesters) public view returns (uint256[] memory) {
-        uint256 propsLength = 7;
-        uint256[] memory amounts = new uint256[](_vesters.length * propsLength);
-        for (uint256 i = 0; i < _vesters.length; i++) {
-            IVester vester = IVester(_vesters[i]);
-            amounts[i * propsLength] = vester.pairAmounts(_account);
-            amounts[i * propsLength + 1] = vester.getVestedAmount(_account);
-            amounts[i * propsLength + 2] = IERC20(_vesters[i]).balanceOf(_account);
-            amounts[i * propsLength + 3] = vester.claimedAmounts(_account);
-            amounts[i * propsLength + 4] = vester.claimable(_account);
-            amounts[i * propsLength + 5] = vester.getMaxVestableAmount(_account);
-            amounts[i * propsLength + 6] = vester.getCombinedAverageStakedAmount(_account);
-        }
-        return amounts;
-    }
 
-    function getPairInfo(address _factory, address[] memory _tokens) public view returns (uint256[] memory) {
-        uint256 inputLength = 2;
-        uint256 propsLength = 2;
-        uint256[] memory amounts = new uint256[](_tokens.length / inputLength * propsLength);
-        for (uint256 i = 0; i < _tokens.length / inputLength; i++) {
-            address token0 = _tokens[i * inputLength];
-            address token1 = _tokens[i * inputLength + 1];
-            address pair = IPancakeFactory(_factory).getPair(token0, token1);
-
-            amounts[i * propsLength] = IERC20(token0).balanceOf(pair);
-            amounts[i * propsLength + 1] = IERC20(token1).balanceOf(pair);
-        }
-        return amounts;
-    }
-
-    function getFundingRates(address _vault, address _weth, address[] memory _tokens) public view returns (uint256[] memory) {
+    function getFundingRates(
+        address _vault,
+        address _weth,
+        address[] memory _tokens
+    ) public view returns (uint256[] memory) {
         uint256 propsLength = 2;
         uint256[] memory fundingRates = new uint256[](_tokens.length * propsLength);
         IVault vault = IVault(_vault);
