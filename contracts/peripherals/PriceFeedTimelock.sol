@@ -11,7 +11,7 @@ import "../referrals/interfaces/IReferralStorage.sol";
 import "../tokens/interfaces/IYieldToken.sol";
 import "../tokens/interfaces/IBaseToken.sol";
 import "../tokens/interfaces/IMintable.sol";
-import "../tokens/interfaces/IUSDG.sol";
+import "../tokens/interfaces/IUSDQ.sol";
 import "../staking/interfaces/IVester.sol";
 
 import "../libraries/math/SafeMath.sol";

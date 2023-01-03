@@ -19,7 +19,7 @@ contract OrderBook is ReentrancyGuard, IOrderBook {
     using Address for address payable;
 
     uint256 public constant PRICE_PRECISION = 1e30;
-    uint256 public constant USDG_PRECISION = 1e18;
+    uint256 public constant USDQ_PRECISION = 1e18;
 
     struct IncreaseOrder {
         address account;
@@ -64,7 +64,7 @@ contract OrderBook is ReentrancyGuard, IOrderBook {
 
     address public gov;
     address public weth;
-    address public usdg;
+    address public usdq;
     address public router;
     address public vault;
     uint256 public minExecutionFee;
@@ -219,7 +219,7 @@ contract OrderBook is ReentrancyGuard, IOrderBook {
         address router,
         address vault,
         address weth,
-        address usdg,
+        address usdq,
         uint256 minExecutionFee,
         uint256 minPurchaseTokenAmountUsd
     );
@@ -240,7 +240,7 @@ contract OrderBook is ReentrancyGuard, IOrderBook {
         address _router,
         address _vault,
         address _weth,
-        address _usdg,
+        address _usdq,
         uint256 _minExecutionFee,
         uint256 _minPurchaseTokenAmountUsd
     ) external onlyGov {
@@ -250,11 +250,11 @@ contract OrderBook is ReentrancyGuard, IOrderBook {
         router = _router;
         vault = _vault;
         weth = _weth;
-        usdg = _usdg;
+        usdq = _usdq;
         minExecutionFee = _minExecutionFee;
         minPurchaseTokenAmountUsd = _minPurchaseTokenAmountUsd;
 
-        emit Initialize(_router, _vault, _weth, _usdg, _minExecutionFee, _minPurchaseTokenAmountUsd);
+        emit Initialize(_router, _vault, _weth, _usdq, _minExecutionFee, _minPurchaseTokenAmountUsd);
     }
 
     receive() external payable {
@@ -412,9 +412,9 @@ contract OrderBook is ReentrancyGuard, IOrderBook {
         );
     }
 
-    function getUsdgMinPrice(address _otherToken) public view returns (uint256) {
-        // USDG_PRECISION is the same as 1 USDG
-        uint256 redemptionAmount = IVault(vault).getRedemptionAmount(_otherToken, USDG_PRECISION);
+    function getUsdqMinPrice(address _otherToken) public view returns (uint256) {
+        // USDQ_PRECISION is the same as 1 USDQ
+        uint256 redemptionAmount = IVault(vault).getRedemptionAmount(_otherToken, USDQ_PRECISION);
         uint256 otherTokenPrice = IVault(vault).getMinPrice(_otherToken);
 
         uint256 otherTokenDecimals = IVault(vault).tokenDecimals(_otherToken);
@@ -435,19 +435,19 @@ contract OrderBook is ReentrancyGuard, IOrderBook {
         uint256 tokenAPrice;
         uint256 tokenBPrice;
 
-        // 1. USDG doesn't have a price feed so we need to calculate it based on redepmtion amount of a specific token
-        // That's why USDG price in USD can vary depending on the redepmtion token
-        // 2. In complex scenarios with path=[USDG, BNB, BTC] we need to know how much BNB we'll get for provided USDG
+        // 1. USDQ doesn't have a price feed so we need to calculate it based on redepmtion amount of a specific token
+        // That's why USDQ price in USD can vary depending on the redepmtion token
+        // 2. In complex scenarios with path=[USDQ, BNB, BTC] we need to know how much BNB we'll get for provided USDQ
         // to know how much BTC will be received
-        // That's why in such scenario BNB should be used to determine price of USDG
-        if (tokenA == usdg) {
-            // with both _path.length == 2 or 3 we need usdg price against _path[1]
-            tokenAPrice = getUsdgMinPrice(_path[1]);
+        // That's why in such scenario BNB should be used to determine price of USDQ
+        if (tokenA == usdq) {
+            // with both _path.length == 2 or 3 we need usdq price against _path[1]
+            tokenAPrice = getUsdqMinPrice(_path[1]);
         } else {
             tokenAPrice = IVault(vault).getMinPrice(tokenA);
         }
 
-        if (tokenB == usdg) {
+        if (tokenB == usdq) {
             tokenBPrice = PRICE_PRECISION;
         } else {
             tokenBPrice = IVault(vault).getMaxPrice(tokenB);
@@ -970,10 +970,10 @@ contract OrderBook is ReentrancyGuard, IOrderBook {
     function _vaultSwap(address _tokenIn, address _tokenOut, uint256 _minOut, address _receiver) private returns (uint256) {
         uint256 amountOut;
 
-        if (_tokenOut == usdg) { // buyUSDG
-            amountOut = IVault(vault).buyUSDG(_tokenIn, _receiver);
-        } else if (_tokenIn == usdg) { // sellUSDG
-            amountOut = IVault(vault).sellUSDG(_tokenOut, _receiver);
+        if (_tokenOut == usdq) { // buyUSDQ
+            amountOut = IVault(vault).buyUSDQ(_tokenIn, _receiver);
+        } else if (_tokenIn == usdq) { // sellUSDQ
+            amountOut = IVault(vault).sellUSDQ(_tokenOut, _receiver);
         } else { // swap
             amountOut = IVault(vault).swap(_tokenIn, _tokenOut, _receiver);
         }
