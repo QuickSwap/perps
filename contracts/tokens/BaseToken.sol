@@ -22,15 +22,15 @@ contract BaseToken is IERC20, IBaseToken {
 
     address public gov;
 
-    mapping (address => uint256) public balances;
-    mapping (address => mapping (address => uint256)) public allowances;
+    mapping(address => uint256) public balances;
+    mapping(address => mapping(address => uint256)) public allowances;
 
     address[] public yieldTrackers;
-    mapping (address => bool) public nonStakingAccounts;
-    mapping (address => bool) public admins;
+    mapping(address => bool) public nonStakingAccounts;
+    mapping(address => bool) public admins;
 
     bool public inPrivateTransferMode;
-    mapping (address => bool) public isHandler;
+    mapping(address => bool) public isHandler;
 
     modifier onlyGov() {
         require(msg.sender == gov, "BaseToken: forbidden");
@@ -42,7 +42,11 @@ contract BaseToken is IERC20, IBaseToken {
         _;
     }
 
-    constructor(string memory _name, string memory _symbol, uint256 _initialSupply) public {
+    constructor(
+        string memory _name,
+        string memory _symbol,
+        uint256 _initialSupply
+    ) public {
         name = _name;
         symbol = _symbol;
         gov = msg.sender;
@@ -71,7 +75,11 @@ contract BaseToken is IERC20, IBaseToken {
     }
 
     // to help users who accidentally send their tokens to this contract
-    function withdrawToken(address _token, address _account, uint256 _amount) external override onlyGov {
+    function withdrawToken(
+        address _token,
+        address _account,
+        uint256 _amount
+    ) external override onlyGov {
         IERC20(_token).safeTransfer(_account, _amount);
     }
 
@@ -140,7 +148,11 @@ contract BaseToken is IERC20, IBaseToken {
         return true;
     }
 
-    function transferFrom(address _sender, address _recipient, uint256 _amount) external override returns (bool) {
+    function transferFrom(
+        address _sender,
+        address _recipient,
+        uint256 _amount
+    ) external override returns (bool) {
         if (isHandler[msg.sender]) {
             _transfer(_sender, _recipient, _amount);
             return true;
@@ -181,7 +193,11 @@ contract BaseToken is IERC20, IBaseToken {
         emit Transfer(_account, address(0), _amount);
     }
 
-    function _transfer(address _sender, address _recipient, uint256 _amount) private {
+    function _transfer(
+        address _sender,
+        address _recipient,
+        uint256 _amount
+    ) private {
         require(_sender != address(0), "BaseToken: transfer from the zero address");
         require(_recipient != address(0), "BaseToken: transfer to the zero address");
 
@@ -202,10 +218,14 @@ contract BaseToken is IERC20, IBaseToken {
             nonStakingSupply = nonStakingSupply.add(_amount);
         }
 
-        emit Transfer(_sender, _recipient,_amount);
+        emit Transfer(_sender, _recipient, _amount);
     }
 
-    function _approve(address _owner, address _spender, uint256 _amount) private {
+    function _approve(
+        address _owner,
+        address _spender,
+        uint256 _amount
+    ) private {
         require(_owner != address(0), "BaseToken: approve from the zero address");
         require(_spender != address(0), "BaseToken: approve to the zero address");
 

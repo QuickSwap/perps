@@ -11,7 +11,11 @@ import "../staking/interfaces/IRewardTracker.sol";
 contract RewardReader {
     using SafeMath for uint256;
 
-    function getDepositBalances(address _account, address[] memory _depositTokens, address[] memory _rewardTrackers) public view returns (uint256[] memory) {
+    function getDepositBalances(
+        address _account,
+        address[] memory _depositTokens,
+        address[] memory _rewardTrackers
+    ) public view returns (uint256[] memory) {
         uint256[] memory amounts = new uint256[](_rewardTrackers.length);
         for (uint256 i = 0; i < _rewardTrackers.length; i++) {
             IRewardTracker rewardTracker = IRewardTracker(_rewardTrackers[i]);

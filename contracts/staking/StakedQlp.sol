@@ -8,11 +8,7 @@ import "../libraries/token/IERC20.sol";
 import "../core/interfaces/IQlpManager.sol";
 
 import "./interfaces/IRewardTracker.sol";
-import "./interfaces/IRewardTracker.sol";
 
-// provide a way to transfer staked QLP tokens by unstaking from the sender
-// and staking for the receiver
-// tests in RewardRouterV2.js
 contract StakedQlp {
     using SafeMath for uint256;
 

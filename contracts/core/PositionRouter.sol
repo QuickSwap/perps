@@ -777,7 +777,7 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
         }
 
         bool success;
-        try IPositionRouterCallbackReceiver(_callbackTarget).qperpPositionCallback{ gas: _gasLimit }(_key, _wasExecuted, _isIncrease) {
+        try IPositionRouterCallbackReceiver(_callbackTarget).quickperpPositionCallback{ gas: _gasLimit }(_key, _wasExecuted, _isIncrease) {
             success = true;
         } catch {}
 

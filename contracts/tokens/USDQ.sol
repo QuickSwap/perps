@@ -6,15 +6,14 @@ import "./interfaces/IUSDQ.sol";
 import "./YieldToken.sol";
 
 contract USDQ is YieldToken, IUSDQ {
-
-    mapping (address => bool) public vaults;
+    mapping(address => bool) public vaults;
 
     modifier onlyVault() {
         require(vaults[msg.sender], "USDQ: forbidden");
         _;
     }
 
-    constructor(address _vault) public YieldToken("Quick Perpetual USD", "USDQ", 0) {
+    constructor(address _vault) public YieldToken("USD Quick Perp", "USDQ", 0) {
         vaults[_vault] = true;
     }
 
