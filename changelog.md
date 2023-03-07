@@ -1,5 +1,9 @@
 
 
+## Version 4
+  ### Pyth Price Feed Contract added
+  1. PythPriceFeed
+     - Secondary Price Feed contract for Pyth integration
 ## Version 3
   ### Changes for Quick Perp
   1. OrderBook
