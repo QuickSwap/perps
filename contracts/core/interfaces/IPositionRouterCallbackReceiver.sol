@@ -3,5 +3,5 @@
 pragma solidity ^0.6.0;
 
 interface IPositionRouterCallbackReceiver {
-    function quickperpPositionCallback(bytes32 positionKey, bool isExecuted, bool isIncrease) external;
+    function quickPositionCallback(bytes32 positionKey, bool isExecuted, bool isIncrease) external;
 }

@@ -29,7 +29,7 @@ contract PositionManager is BasePositionManager {
     event SetInLegacyMode(bool inLegacyMode);
     event SetShouldValidateIncreaseOrder(bool shouldValidateIncreaseOrder);
     event SetMinStayingOpenTime(uint256 _minStayingOpenTime);
-    event SetPartnerMinStayingOpenTime(address account, uint256 minTime);
+    event SetPartnerMinStayingOpenTime(address indexed account, uint256 minTime);
 
     modifier onlyOrderKeeper() {
         require(isOrderKeeper[msg.sender], "PositionManager: forbidden");
@@ -186,7 +186,7 @@ contract PositionManager is BasePositionManager {
        _validatePositionTime(msg.sender, _collateralToken, _indexToken, _isLong);
 
         uint256 amountOut = _decreasePosition(msg.sender, _collateralToken, _indexToken, _collateralDelta, _sizeDelta, _isLong, address(this), _price);
-        _transferOutETHWithGasLimitIgnoreFail(amountOut, _receiver);
+        _transferOutETHWithGasLimitFallbackToWeth(amountOut, _receiver);
     }
 
     function decreasePositionAndSwap(
@@ -224,7 +224,7 @@ contract PositionManager is BasePositionManager {
         uint256 amount = _decreasePosition(msg.sender, _path[0], _indexToken, _collateralDelta, _sizeDelta, _isLong, address(this), _price);
         IERC20(_path[0]).safeTransfer(vault, amount);
         uint256 amountOut = _swap(_path, _minOut, address(this));
-        _transferOutETHWithGasLimitIgnoreFail(amountOut, _receiver);
+        _transferOutETHWithGasLimitFallbackToWeth(amountOut, _receiver);
     }
 
     function liquidatePosition(

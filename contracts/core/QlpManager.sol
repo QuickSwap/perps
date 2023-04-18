@@ -18,7 +18,7 @@ contract QlpManager is ReentrancyGuard, Governable, IQlpManager {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    uint256 public constant PRICE_PRECISION = 10**30;
+    uint256 public constant PRICE_PRECISION = 10 ** 30;
     uint256 public constant USDQ_DECIMALS = 18;
     uint256 public constant QLP_PRECISION = 10 ** 18;
     uint256 public constant MAX_COOLDOWN_DURATION = 48 hours;
@@ -30,7 +30,7 @@ contract QlpManager is ReentrancyGuard, Governable, IQlpManager {
     address public override qlp;
 
     uint256 public override cooldownDuration;
-    mapping(address => uint256) public override lastAddedAt;
+    mapping (address => uint256) public override lastAddedAt;
 
     uint256 public aumAddition;
     uint256 public aumDeduction;

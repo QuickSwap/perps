@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: MIT
 
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-
 import "./interfaces/IPythPriceFeed.sol";
 import "./interfaces/IPositionRouter.sol";
 import "./Governable.sol";
@@ -12,9 +10,8 @@ import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 pragma solidity ^0.8.0;
 
 contract PythPriceFeed is IPythPriceFeed, Governable {
-    using SafeMath for uint256;
 
-    IPyth public pyth;
+    IPyth public immutable pyth;
 
     uint256 public constant PRICE_PRECISION = 10 ** 30;
 
@@ -23,7 +20,7 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
     uint256 public constant MAX_PRICE_DURATION = 30 minutes;
 
     bool public isInitialized;
-    bool public isSpreadEnabled = false;
+    bool public isSpreadEnabled;
 
     address public tokenManager;
 
@@ -33,12 +30,13 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
     uint256 public maxPriceUpdateDelay;
     uint256 public spreadBasisPointsIfInactive;
     uint256 public spreadBasisPointsIfChainError;
+    uint256 public signersCount;
 
     // allowed deviation from primary price
     uint256 public maxDeviationBasisPoints;
 
     uint256 public minAuthorizations;
-    uint256 public disableFastPriceVoteCount = 0;
+    uint256 public disableFastPriceVoteCount;
 
     mapping (address => bool) public isUpdater;
 
@@ -51,6 +49,9 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
 
     event DisableFastPrice(address signer);
     event EnableFastPrice(address signer);
+    event SetSigner(address indexed signer, bool isActive);
+    event SetUpdater(address indexed updater, bool isActive);
+    event SetPositionRouter(address positionRouter);
 
     modifier onlySigner() {
         require(isSigner[msg.sender], "FastPriceFeed: forbidden");
@@ -76,6 +77,9 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
       address _pythContract
     )  {
         require(_priceDuration <= MAX_PRICE_DURATION, "FastPriceFeed: invalid _priceDuration");
+        require(_tokenManager != address(0), "FastPriceFeed: invalid tokenManager");
+        require(_positionRouter != address(0), "FastPriceFeed: invalid positionRouter");
+        require(_pythContract != address(0), "FastPriceFeed: invalid pythContract");
         priceDuration = _priceDuration;
         maxPriceUpdateDelay = _maxPriceUpdateDelay;
         maxDeviationBasisPoints = _maxDeviationBasisPoints;
@@ -84,32 +88,53 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
         pyth = IPyth(_pythContract);
     }
 
-    function initialize(uint256 _minAuthorizations, address[] memory _signers, address[] memory _updaters) public onlyGov {
+    function initialize(uint256 _minAuthorizations, address[] calldata _signers, address[] calldata _updaters) external onlyGov {
         require(!isInitialized, "FastPriceFeed: already initialized");
+        require(_minAuthorizations <= _signers.length, "FastPriceFeed: minAuthorizations > signersCount");
+
         isInitialized = true;
 
         minAuthorizations = _minAuthorizations;
 
         for (uint256 i = 0; i < _signers.length; i++) {
-            address signer = _signers[i];
-            isSigner[signer] = true;
+            _setSigner(_signers[i],true);
         }
 
         for (uint256 i = 0; i < _updaters.length; i++) {
-            address updater = _updaters[i];
-            isUpdater[updater] = true;
+            _setUpdater(_updaters[i],true);
         }
+
     }
     
     function setPositionRouter(address _positionRouter) external onlyTokenManager {
         positionRouter = _positionRouter;
+        emit SetPositionRouter(_positionRouter);
     }
     function setSigner(address _account, bool _isActive) external override onlyGov {
-        isSigner[_account] = _isActive;
+        _setSigner(_account,_isActive);
     }
 
+    function _setSigner(address _account, bool _isActive) private {
+        if(!isSigner[_account] && _isActive) {
+            signersCount++;
+        } else if(isSigner[_account] && !_isActive) {
+            require(minAuthorizations<signersCount,"FastPriceFeed: min auth must be reduce first");
+            signersCount--;
+        } else {
+            return;
+        }               
+
+        isSigner[_account] = _isActive;
+        emit SetSigner(_account,_isActive);
+    }    
+
     function setUpdater(address _account, bool _isActive) external override onlyGov {
+        _setUpdater(_account,_isActive);
+    }
+
+    function _setUpdater(address _account, bool _isActive) private {
         isUpdater[_account] = _isActive;
+        emit SetUpdater(_account,_isActive);
     }
 
     function setPriceDuration(uint256 _priceDuration) external override onlyGov {
@@ -141,21 +166,24 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
         maxDeviationBasisPoints = _maxDeviationBasisPoints;
     }
 
-    function setPriceFeedIds(address[] memory _tokens,  bytes32[] memory _priceFeedIds) external  onlyTokenManager {
+    function setPriceFeedIds(address[] calldata _tokens,  bytes32[] calldata _priceFeedIds) external  onlyTokenManager {
+        require(_tokens.length == _priceFeedIds.length, "FastPriceFeed: array lengths mismatch");
         for (uint256 i = 0; i < _tokens.length; i++) {
             address token = _tokens[i];
             priceFeedIds[token] = _priceFeedIds[i];
         }
     }
 
-    function setPriceConfidenceMultipliers(address[] memory _tokens,  uint256[] memory _priceConfidenceMultipliers) external  onlyGov {
+    function setPriceConfidenceMultipliers(address[] calldata _tokens,  uint256[] calldata _priceConfidenceMultipliers) external  onlyGov {
+        require(_tokens.length == _priceConfidenceMultipliers.length, "FastPriceFeed: array lengths mismatch");
         for (uint256 i = 0; i < _tokens.length; i++) {
             address token = _tokens[i];
             priceConfidenceMultipliers[token] = _priceConfidenceMultipliers[i];
         }
     }
 
-    function setPriceConfidenceThresholds(address[] memory _tokens,  uint256[] memory _priceConfidenceThresholds) external  onlyGov {
+    function setPriceConfidenceThresholds(address[] calldata _tokens,  uint256[] calldata _priceConfidenceThresholds) external  onlyGov {
+        require(_tokens.length == _priceConfidenceThresholds.length, "FastPriceFeed: array lengths mismatch");
         for (uint256 i = 0; i < _tokens.length; i++) {
             address token = _tokens[i];
             priceConfidenceThresholds[token] = _priceConfidenceThresholds[i];
@@ -163,6 +191,7 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
     }
 
     function setMinAuthorizations(uint256 _minAuthorizations) external onlyTokenManager {
+        require(_minAuthorizations <= signersCount, "FastPriceFeed: minAuthorizations > signersCount");
         minAuthorizations = _minAuthorizations;
     }
 
@@ -186,8 +215,8 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
 
 
         IPositionRouter _positionRouter = IPositionRouter(positionRouter);
-        uint256 maxEndIndexForIncrease = _positionRouter.increasePositionRequestKeysStart().add(_maxIncreasePositions);
-        uint256 maxEndIndexForDecrease = _positionRouter.decreasePositionRequestKeysStart().add(_maxDecreasePositions);
+        uint256 maxEndIndexForIncrease = _positionRouter.increasePositionRequestKeysStart() + _maxIncreasePositions;
+        uint256 maxEndIndexForDecrease = _positionRouter.decreasePositionRequestKeysStart() + _maxDecreasePositions;
 
         if (_endIndexForIncreasePositions > maxEndIndexForIncrease) {
             _endIndexForIncreasePositions = maxEndIndexForIncrease;
@@ -207,7 +236,7 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
     function disableFastPrice() external onlySigner {
         require(!disableFastPriceVotes[msg.sender], "FastPriceFeed: already voted");
         disableFastPriceVotes[msg.sender] = true;
-        disableFastPriceVoteCount = disableFastPriceVoteCount.add(1);
+        disableFastPriceVoteCount = disableFastPriceVoteCount++;
 
         emit DisableFastPrice(msg.sender);
     }
@@ -215,12 +244,12 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
     function enableFastPrice() external onlySigner {
         require(disableFastPriceVotes[msg.sender], "FastPriceFeed: already enabled");
         disableFastPriceVotes[msg.sender] = false;
-        disableFastPriceVoteCount = disableFastPriceVoteCount.sub(1);
+        disableFastPriceVoteCount = disableFastPriceVoteCount--;
 
         emit EnableFastPrice(msg.sender);
     }
 
-    function _getPythPrice(address _token) private view returns (uint256,uint256,uint256){ //must be private 
+    function _getPythPrice(address _token) private view returns (uint256,uint256,uint256){
         
         uint256 price;
         uint256 confDiff;
@@ -230,10 +259,12 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
 
 
         if (pythPrice.price>=0 && pythPrice.expo<=0){
-            price =  (uint256(uint64(pythPrice.price)).mul(PRICE_PRECISION)).div(10 ** uint32(-pythPrice.expo));
-            uint256 conf = uint256(pythPrice.conf).mul(PRICE_PRECISION).div(10 ** uint32(-pythPrice.expo));
-            if(conf.mul(BASIS_POINTS_DIVISOR).div(price)>priceConfidenceThresholds[_token]){
-                confDiff = conf.mul(priceConfidenceMultipliers[_token]).div(BASIS_POINTS_DIVISOR);        
+            price =  (uint256(uint64(pythPrice.price)) * PRICE_PRECISION) / 10 ** uint32(-pythPrice.expo);         
+                        
+            uint256 conf = (uint256(pythPrice.conf) * PRICE_PRECISION) / 10 ** uint32(-pythPrice.expo);
+            
+            if((conf * BASIS_POINTS_DIVISOR) / price > priceConfidenceThresholds[_token]){
+                confDiff = (conf * priceConfidenceMultipliers[_token]) / BASIS_POINTS_DIVISOR;        
             }   
             
         }
@@ -259,40 +290,40 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
 
 
 
-        if (block.timestamp > lastUpdatedAt.add(maxPriceUpdateDelay)) {
+        if (block.timestamp > lastUpdatedAt + maxPriceUpdateDelay) {
             if (_maximise) {
-                return _refPrice.mul(BASIS_POINTS_DIVISOR.add(spreadBasisPointsIfChainError)).div(BASIS_POINTS_DIVISOR);
+                return (_refPrice * (BASIS_POINTS_DIVISOR + spreadBasisPointsIfChainError)) / BASIS_POINTS_DIVISOR;
             }
 
-            return _refPrice.mul(BASIS_POINTS_DIVISOR.sub(spreadBasisPointsIfChainError)).div(BASIS_POINTS_DIVISOR);
+            return (_refPrice * (BASIS_POINTS_DIVISOR - spreadBasisPointsIfChainError)) / BASIS_POINTS_DIVISOR;
         }
 
-        if (block.timestamp > lastUpdatedAt.add(priceDuration)) {
+        if (block.timestamp > lastUpdatedAt + priceDuration) {
             if (_maximise) {
-                return _refPrice.mul(BASIS_POINTS_DIVISOR.add(spreadBasisPointsIfInactive)).div(BASIS_POINTS_DIVISOR);
+                return (_refPrice * (BASIS_POINTS_DIVISOR + spreadBasisPointsIfInactive)) / BASIS_POINTS_DIVISOR;
             }
 
-            return _refPrice.mul(BASIS_POINTS_DIVISOR.sub(spreadBasisPointsIfInactive)).div(BASIS_POINTS_DIVISOR);
+            return (_refPrice * (BASIS_POINTS_DIVISOR - spreadBasisPointsIfInactive)) / BASIS_POINTS_DIVISOR;
         }
 
         if(fastPrice == 0) return _refPrice;
 
         if(confDiff>0){
             if (_maximise) {                
-                fastPrice = fastPrice.add(confDiff);
+                fastPrice = fastPrice + confDiff;
             }else{
-                fastPrice = fastPrice.sub(confDiff);
+                fastPrice = fastPrice - confDiff;
             }    
         }
 
 
 
-        uint256 diffBasisPoints = _refPrice > fastPrice ? _refPrice.sub(fastPrice) : fastPrice.sub(_refPrice);
-        diffBasisPoints = diffBasisPoints.mul(BASIS_POINTS_DIVISOR).div(_refPrice);
+        uint256 diffBasisPoints = _refPrice > fastPrice ? _refPrice - fastPrice : fastPrice - _refPrice;
+        diffBasisPoints = (diffBasisPoints * BASIS_POINTS_DIVISOR) / _refPrice;
 
         // create a spread between the _refPrice and the fastPrice if the maxDeviationBasisPoints is exceeded
         // or if watchers have flagged an issue with the fast price
-        bool hasSpread = !favorFastPrice() || diffBasisPoints > maxDeviationBasisPoints;
+        bool hasSpread = diffBasisPoints > maxDeviationBasisPoints || !favorFastPrice();
 
         if (hasSpread) {
             // return the higher of the two prices
@@ -308,16 +339,7 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
     }
 
     function favorFastPrice() public view returns (bool) {
-        if (isSpreadEnabled) {
-            return false;
-        }
-
-        if (disableFastPriceVoteCount >= minAuthorizations) {
-            // force a spread if watchers have flagged an issue with the fast price
-            return false;
-        }
-
-        return true;
+        return !isSpreadEnabled && disableFastPriceVoteCount < minAuthorizations;
     }
 
 }

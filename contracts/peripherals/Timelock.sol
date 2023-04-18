@@ -36,7 +36,7 @@ contract Timelock is ITimelock {
     address public rewardRouter;
 
 
-    uint256 public marginFeeBasisPoints;
+    uint256 public override marginFeeBasisPoints;
     uint256 public maxMarginFeeBasisPoints;
     bool public shouldToggleIsLeverageEnabled;
 
