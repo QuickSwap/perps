@@ -67,7 +67,6 @@ contract Router is IRouter {
 
     function pluginTransfer(address _token, address _account, address _receiver, uint256 _amount) external override {
         _validatePlugin(_account);
-        _validateToken(_token);
         IERC20(_token).safeTransferFrom(_account, _receiver, _amount);
     }
 
@@ -82,13 +81,11 @@ contract Router is IRouter {
     }
 
     function directPoolDeposit(address _token, uint256 _amount) external {
-        _validateToken(_token);
         IERC20(_token).safeTransferFrom(_sender(), vault, _amount);
         IVault(vault).directPoolDeposit(_token);
     }
 
     function swap(address[] memory _path, uint256 _amountIn, uint256 _minOut, address _receiver) public override {
-        _validateToken(_path[0]);
         IERC20(_path[0]).safeTransferFrom(_sender(), vault, _amountIn);
         uint256 amountOut = _swap(_path, _minOut, _receiver);
         emit Swap(msg.sender, _path[0], _path[_path.length - 1], _amountIn, amountOut);
@@ -103,7 +100,6 @@ contract Router is IRouter {
 
     function swapTokensToETH(address[] memory _path, uint256 _amountIn, uint256 _minOut, address payable _receiver) external {
         require(_path[_path.length - 1] == weth, "Router: invalid _path");
-        _validateToken(_path[0]);        
         IERC20(_path[0]).safeTransferFrom(_sender(), vault, _amountIn);
         uint256 amountOut = _swap(_path, _minOut, address(this));
         _transferOutETH(amountOut, _receiver);
@@ -112,7 +108,6 @@ contract Router is IRouter {
 
     function increasePosition(address[] memory _path, address _indexToken, uint256 _amountIn, uint256 _minOut, uint256 _sizeDelta, bool _isLong, uint256 _price) external {
         if (_amountIn > 0) {
-            _validateToken(_path[0]);
             IERC20(_path[0]).safeTransferFrom(_sender(), vault, _amountIn);
         }
         if (_path.length > 1 && _amountIn > 0) {
@@ -222,8 +217,5 @@ contract Router is IRouter {
     function _validatePlugin(address _account) private view {
         require(plugins[msg.sender], "Router: invalid plugin");
         require(approvedPlugins[_account][msg.sender], "Router: plugin not approved");
-    }
-    function _validateToken(address _token) private view {
-        require(IVault(vault).whitelistedTokens(_token),"Router: token not whitelisted");
     }
 }

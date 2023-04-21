@@ -20,12 +20,12 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
         address indexToken;
         uint256 amountIn;
         uint256 minOut;
-        uint256 sizeDelta;
-        bool isLong;
+        uint256 sizeDelta;        
         uint256 acceptablePrice;
         uint256 executionFee;
         uint256 blockNumber;
         uint256 blockTime;
+        bool isLong;
         bool hasCollateralInETH;
         address callbackTarget;
     }
@@ -35,14 +35,14 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
         address[] path;
         address indexToken;
         uint256 collateralDelta;
-        uint256 sizeDelta;
-        bool isLong;
+        uint256 sizeDelta;        
         address receiver;
         uint256 acceptablePrice;
         uint256 minOut;
         uint256 executionFee;
         uint256 blockNumber;
         uint256 blockTime;
+        bool isLong;
         bool withdrawETH;
         address callbackTarget;
     }
@@ -62,7 +62,6 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
     uint256 public override decreasePositionRequestKeysStart;
 
     uint256 public callbackGasLimit;
-    mapping (address => uint256) public customCallbackGasLimits;
 
     mapping (address => bool) public isPositionKeeper;
 
@@ -170,7 +169,6 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
     event SetDelayValues(uint256 minBlockDelayKeeper, uint256 minTimeDelayPublic, uint256 maxTimeDelay);
     event SetRequestKeysStartValues(uint256 increasePositionRequestKeysStart, uint256 decreasePositionRequestKeysStart);
     event SetCallbackGasLimit(uint256 callbackGasLimit);
-    event SetCustomCallbackGasLimit(address callbackTarget, uint256 callbackGasLimit);
     event Callback(address callbackTarget, bool success, uint256 callbackGasLimit);
 
     modifier onlyPositionKeeper() {
@@ -197,11 +195,6 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
     function setCallbackGasLimit(uint256 _callbackGasLimit) external onlyAdmin {
         callbackGasLimit = _callbackGasLimit;
         emit SetCallbackGasLimit(_callbackGasLimit);
-    }
-
-    function setCustomCallbackGasLimit(address _callbackTarget, uint256 _callbackGasLimit) external onlyAdmin {
-        customCallbackGasLimits[_callbackTarget] = _callbackGasLimit;
-        emit SetCustomCallbackGasLimit(_callbackTarget, _callbackGasLimit);
     }
 
     function setMinExecutionFee(uint256 _minExecutionFee) external onlyAdmin {
@@ -312,6 +305,7 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
         require(_executionFee >= minExecutionFee, "fee");
         require(msg.value == _executionFee, "val");
         require(_path.length == 1 || _path.length == 2, "len");
+        _validateTokens(_path,_indexToken);
 
         _transferInETH();
         _setTraderReferralCode(_referralCode);
@@ -350,6 +344,7 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
         require(msg.value >= _executionFee, "val");
         require(_path.length == 1 || _path.length == 2, "len");
         require(_path[0] == weth, "path");
+        _validateTokens(_path,_indexToken);
         _transferInETH();
         _setTraderReferralCode(_referralCode);
 
@@ -386,10 +381,10 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
         require(_executionFee >= minExecutionFee, "fee");
         require(msg.value == _executionFee, "val");
         require(_path.length == 1 || _path.length == 2, "len");
-
         if (_withdrawETH) {
             require(_path[_path.length - 1] == weth, "path");
         }
+        _validateTokens(_path,_indexToken);
 
         _transferInETH();
 
@@ -648,12 +643,12 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
             _indexToken,
             _amountIn,
             _minOut,
-            _sizeDelta,
-            _isLong,
+            _sizeDelta,            
             _acceptablePrice,
             _executionFee,
             block.number,
             block.timestamp,
+            _isLong,
             _hasCollateralInETH,
             _callbackTarget
         );
@@ -722,14 +717,14 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
             _path,
             _indexToken,
             _collateralDelta,
-            _sizeDelta,
-            _isLong,
+            _sizeDelta,            
             _receiver,
             _acceptablePrice,
             _minOut,
             _executionFee,
             block.number,
             block.timestamp,
+            _isLong,
             _withdrawETH,
             _callbackTarget
         );
@@ -770,12 +765,6 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
 
         uint256 _gasLimit = callbackGasLimit;
 
-        uint256 _customCallbackGasLimit = customCallbackGasLimits[_callbackTarget];
-
-        if (_customCallbackGasLimit > _gasLimit) {
-            _gasLimit = _customCallbackGasLimit;
-        }
-
         if (_gasLimit == 0) {
             return;
         }
@@ -786,5 +775,13 @@ contract PositionRouter is BasePositionManager, IPositionRouter {
         } catch {}
 
         emit Callback(_callbackTarget, success, _gasLimit);
+    }
+
+    function _validateTokens(address[] memory _path,address _indexToken) private view {
+        require(IVault(vault).whitelistedTokens(_path[0]),"wl");
+        if(_path.length==2){
+            require(IVault(vault).whitelistedTokens(_path[1]),"wl");
+        }
+        require(IVault(vault).whitelistedTokens(_indexToken),"wl");
     }
 }

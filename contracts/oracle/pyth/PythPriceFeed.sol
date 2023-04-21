@@ -107,6 +107,7 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
     }
     
     function setPositionRouter(address _positionRouter) external onlyTokenManager {
+        require(_positionRouter != address(0), "FastPriceFeed: invalid positionRouter");
         positionRouter = _positionRouter;
         emit SetPositionRouter(_positionRouter);
     }
@@ -118,7 +119,7 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
         if(!isSigner[_account] && _isActive) {
             signersCount++;
         } else if(isSigner[_account] && !_isActive) {
-            require(minAuthorizations<signersCount,"FastPriceFeed: min auth must be reduce first");
+            require(minAuthorizations<signersCount,"FastPriceFeed: min auth must be reduced first");
             signersCount--;
         } else {
             return;
@@ -159,6 +160,7 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
     }
 
     function setTokenManager(address _tokenManager) external onlyTokenManager {
+        require(_tokenManager != address(0), "FastPriceFeed: invalid tokenManager");
         tokenManager = _tokenManager;
     }
 
@@ -206,7 +208,6 @@ contract PythPriceFeed is IPythPriceFeed, Governable {
     ) external payable onlyUpdater {
         uint fee = pyth.getUpdateFee(priceUpdateData);
         require(msg.value == fee, "PythPriceFeed: invalid msg.value");
-        // pyth.updatePriceFeeds(priceUpdateData);
 
         try pyth.updatePriceFeedsIfNecessary{ value: fee }(priceUpdateData,priceIds,publishTimes) {
         } catch {
