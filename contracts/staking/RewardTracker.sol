@@ -34,19 +34,24 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
     mapping(address => uint256) public balances;
     mapping(address => mapping(address => uint256)) public allowances;
 
-    uint256 public cumulativeRewardPerToken;
+    mapping(address => uint256) public  cumulativeRewardPerToken;
+
     mapping(address => uint256) public override stakedAmounts;
-    mapping(address => uint256) public claimableReward;
-    mapping(address => uint256) public previousCumulatedRewardPerToken;
-    mapping(address => uint256) public override cumulativeRewards;
+    mapping(address => mapping(address => uint256)) public  claimableReward;
+
+    mapping(address => mapping(address => uint256)) public previousCumulatedRewardPerToken;
+
+    mapping(address => mapping(address => uint256)) public override cumulativeRewards;
+
     mapping(address => uint256) public override averageStakedAmounts;
+
 
     bool public inPrivateTransferMode;
     bool public inPrivateStakingMode;
     bool public inPrivateClaimingMode;
     mapping(address => bool) public isHandler;
 
-    event Claim(address receiver, uint256 amount);
+    event Claim(address indexed receiver,address  rewardToken, uint256 amount);
 
     constructor(string memory _name, string memory _symbol) public {
         name = _name;
@@ -162,50 +167,117 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
         return true;
     }
 
-    function tokensPerInterval() external view override returns (uint256) {
-        return IRewardDistributor(distributor).tokensPerInterval();
+    function tokensPerInterval(address _rewardToken) external view override returns (uint256) {
+        return IRewardDistributor(distributor).tokensPerInterval(_rewardToken);
     }
 
-    function updateRewards() external override nonReentrant {
-        _updateRewards(address(0));
+    function updateRewards(address _rewardToken) external override nonReentrant {
+        require(IRewardDistributor(distributor).allTokens(_rewardToken), "RewardTracker: invalid _rewardToken");
+        _updateRewards(address(0),_rewardToken);
     }
 
-    function claim(address _receiver) external override nonReentrant returns (uint256) {
+    function hasCumulativeRewards(address _account) external view override returns (bool) {
+        uint256 length = IRewardDistributor(distributor).allRewardTokensLength();
+        for (uint256 i = 0; i < length; i++) {
+            address token = IRewardDistributor(distributor).allRewardTokens(i);
+            if(cumulativeRewards[_account][token]>0){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function claimAll(address _receiver) external override nonReentrant returns (address[] memory,uint256[] memory) {
         if (inPrivateClaimingMode) {
             revert("RewardTracker: action not enabled");
         }
-        return _claim(msg.sender, _receiver);
+        return _claimAll(msg.sender, _receiver);
     }
 
-    function claimForAccount(address _account, address _receiver) external override nonReentrant returns (uint256) {
+    function claim(address _rewardToken, address _receiver) external override nonReentrant returns (uint256) {
+        if (inPrivateClaimingMode) {
+            revert("RewardTracker: action not enabled");
+        }
+        require(IRewardDistributor(distributor).allTokens(_rewardToken), "RewardTracker: invalid _rewardToken");
+        return _claim(msg.sender, _rewardToken, _receiver);
+    }
+
+    function claimAllForAccount(address _account, address _receiver) external override nonReentrant returns (address[] memory,uint256[] memory) {
         _validateHandler();
-        return _claim(_account, _receiver);
+        return _claimAll(_account, _receiver);
     }
 
-    function claimable(address _account) public view override returns (uint256) {
+    function _claimAll(address _account, address _receiver) private returns (address[] memory,uint256[] memory) {
+        uint256 length = IRewardDistributor(distributor).allRewardTokensLength();
+
+        address[] memory tokens = new address[](length);
+        uint256[] memory amounts = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            address token = IRewardDistributor(distributor).allRewardTokens(i);
+            tokens[i] = token;
+            amounts[i] = _claim(_account, token, _receiver);
+        }
+        return (tokens,amounts);
+    }
+
+    function claimForAccount(address _account, address _rewardToken, address _receiver) external override nonReentrant returns (uint256) {
+        _validateHandler();
+        require(IRewardDistributor(distributor).allTokens(_rewardToken), "RewardTracker: invalid _rewardToken");
+        return _claim(_account, _rewardToken, _receiver);
+    }
+
+    function claimableAll(address _account) external view override returns (address[] memory,uint256[] memory) {
+       
+        uint256 length = IRewardDistributor(distributor).allRewardTokensLength();
+
+        address[] memory tokens = new address[](length);
+        uint256[] memory amounts = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            address token = IRewardDistributor(distributor).allRewardTokens(i);
+            uint256 amount = claimable(_account, token);
+            tokens[i] = token;
+            amounts[i] = amount;
+        }
+        return (tokens,amounts);
+    }
+
+
+    function claimable(address _account, address _rewardToken) public view override returns (uint256) {
+        require(IRewardDistributor(distributor).allTokens(_rewardToken), "RewardTracker: invalid _rewardToken");
         uint256 stakedAmount = stakedAmounts[_account];
         if (stakedAmount == 0) {
-            return claimableReward[_account];
+            return claimableReward[_account][_rewardToken];
         }
         uint256 supply = totalSupply;
-        uint256 pendingRewards = IRewardDistributor(distributor).pendingRewards().mul(PRECISION);
-        uint256 nextCumulativeRewardPerToken = cumulativeRewardPerToken.add(pendingRewards.div(supply));
-        return claimableReward[_account].add(stakedAmount.mul(nextCumulativeRewardPerToken.sub(previousCumulatedRewardPerToken[_account])).div(PRECISION));
+        uint256 pendingRewards = IRewardDistributor(distributor).pendingRewards(_rewardToken).mul(PRECISION);
+        uint256 nextCumulativeRewardPerToken = cumulativeRewardPerToken[_rewardToken].add(pendingRewards.div(supply));
+        return claimableReward[_account][_rewardToken].add(stakedAmount.mul(nextCumulativeRewardPerToken.sub(previousCumulatedRewardPerToken[_account][_rewardToken])).div(PRECISION));
     }
 
-    function rewardToken() public view returns (address) {
-        return IRewardDistributor(distributor).rewardToken();
+    function getAllRewardTokens() external override view returns (address[] memory) {
+        return IRewardDistributor(distributor).getAllRewardTokens();
     }
 
-    function _claim(address _account, address _receiver) private returns (uint256) {
-        _updateRewards(_account);
+    function rewardTokens(address _rewardToken) external override view returns (bool) {
+        return IRewardDistributor(distributor).rewardTokens(_rewardToken);
+    }
 
-        uint256 tokenAmount = claimableReward[_account];
-        claimableReward[_account] = 0;
+    function allTokens(address _rewardToken) external override view returns (bool) {
+        return IRewardDistributor(distributor).allTokens(_rewardToken);
+    }
+
+
+    function _claim(address _account, address _rewardToken, address _receiver) private returns (uint256) {
+        _updateRewards(_account, _rewardToken);
+
+        uint256 tokenAmount = claimableReward[_account][_rewardToken];
+        claimableReward[_account][_rewardToken] = 0;
 
         if (tokenAmount > 0) {
-            IERC20(rewardToken()).safeTransfer(_receiver, tokenAmount);
-            emit Claim(_account, tokenAmount);
+            IERC20(_rewardToken).safeTransfer(_receiver, tokenAmount);
+            emit Claim(_account, _rewardToken, tokenAmount);
         }
 
         return tokenAmount;
@@ -275,7 +347,7 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
 
         IERC20(_depositToken).safeTransferFrom(_fundingAccount, address(this), _amount);
 
-        _updateRewards(_account);
+        _updateRewardsAll(_account);
 
         stakedAmounts[_account] = stakedAmounts[_account].add(_amount);
         depositBalances[_account][_depositToken] = depositBalances[_account][_depositToken].add(_amount);
@@ -293,7 +365,7 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
         require(_amount > 0, "RewardTracker: invalid _amount");
         require(isDepositToken[_depositToken], "RewardTracker: invalid _depositToken");
 
-        _updateRewards(_account);
+        _updateRewardsAll(_account);
 
         uint256 stakedAmount = stakedAmounts[_account];
         require(stakedAmounts[_account] >= _amount, "RewardTracker: _amount exceeds stakedAmount");
@@ -309,14 +381,24 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
         IERC20(_depositToken).safeTransfer(_receiver, _amount);
     }
 
-    function _updateRewards(address _account) private {
-        uint256 blockReward = IRewardDistributor(distributor).distribute();
+    function _updateRewardsAll(address _account) private {
+        uint256 length = IRewardDistributor(distributor).allRewardTokensLength();
+        for (uint256 i = 0; i < length; i++) {
+            address token = IRewardDistributor(distributor).allRewardTokens(i);
+            _updateRewards(_account, token);
+        }
+    }
+
+
+
+    function _updateRewards(address _account, address _rewardToken) private {
+        uint256 blockReward = IRewardDistributor(distributor).distribute(_rewardToken);
 
         uint256 supply = totalSupply;
-        uint256 _cumulativeRewardPerToken = cumulativeRewardPerToken;
+        uint256 _cumulativeRewardPerToken = cumulativeRewardPerToken[_rewardToken];
         if (supply > 0 && blockReward > 0) {
             _cumulativeRewardPerToken = _cumulativeRewardPerToken.add(blockReward.mul(PRECISION).div(supply));
-            cumulativeRewardPerToken = _cumulativeRewardPerToken;
+            cumulativeRewardPerToken[_rewardToken] = _cumulativeRewardPerToken;
         }
 
         // cumulativeRewardPerToken can only increase
@@ -326,22 +408,27 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
         }
 
         if (_account != address(0)) {
-            uint256 stakedAmount = stakedAmounts[_account];
-            uint256 accountReward = stakedAmount.mul(_cumulativeRewardPerToken.sub(previousCumulatedRewardPerToken[_account])).div(PRECISION);
-            uint256 _claimableReward = claimableReward[_account].add(accountReward);
-
-            claimableReward[_account] = _claimableReward;
-            previousCumulatedRewardPerToken[_account] = _cumulativeRewardPerToken;
-
-            if (_claimableReward > 0 && stakedAmounts[_account] > 0) {
-                uint256 nextCumulativeReward = cumulativeRewards[_account].add(accountReward);
-
-                averageStakedAmounts[_account] = averageStakedAmounts[_account].mul(cumulativeRewards[_account]).div(nextCumulativeReward).add(
-                    stakedAmount.mul(accountReward).div(nextCumulativeReward)
-                );
-
-                cumulativeRewards[_account] = nextCumulativeReward;
-            }
+            _updateAccountRewards(_account, _rewardToken, _cumulativeRewardPerToken);
         }
     }
+
+    function _updateAccountRewards(address _account, address _rewardToken, uint256 _cumulativeRewardPerToken) private {
+        uint256 stakedAmount = stakedAmounts[_account];
+        uint256 accountReward = stakedAmount.mul(_cumulativeRewardPerToken.sub(previousCumulatedRewardPerToken[_account][_rewardToken])).div(PRECISION);
+        uint256 _claimableReward = claimableReward[_account][_rewardToken].add(accountReward);
+
+        claimableReward[_account][_rewardToken] = _claimableReward;
+        previousCumulatedRewardPerToken[_account][_rewardToken] = _cumulativeRewardPerToken;
+
+        if (_claimableReward > 0 && stakedAmounts[_account] > 0) {
+            uint256 nextCumulativeReward = cumulativeRewards[_account][_rewardToken].add(accountReward);
+
+            averageStakedAmounts[_account] = averageStakedAmounts[_account].mul(cumulativeRewards[_account][_rewardToken]).div(nextCumulativeReward).add(
+                stakedAmount.mul(accountReward).div(nextCumulativeReward)
+            );
+
+            cumulativeRewards[_account][_rewardToken] = nextCumulativeReward;
+        }
+    }
+
 }

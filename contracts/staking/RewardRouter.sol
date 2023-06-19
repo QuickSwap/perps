@@ -14,28 +14,35 @@ import "../tokens/interfaces/IMintable.sol";
 import "../tokens/interfaces/IWETH.sol";
 import "../core/interfaces/IQlpManager.sol";
 import "../access/Governable.sol";
+import "./../core/interfaces/IVault.sol";
+import "./interfaces/IRewardTrackerClaim.sol";
 
 contract RewardRouter is ReentrancyGuard, Governable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
     using Address for address payable;
 
-    bool public isInitialized;
+    address public immutable weth;
 
-    address public weth;
+    address public immutable qlp; 
 
-    address public qlp; // QPX Liquidity Provider token
+    address public immutable feeQlpTracker;
 
-    address public stakedQlpTracker;
-    address public feeQlpTracker;
+    address public immutable qlpManager;
 
-    address public qlpManager;
+    address public immutable oldStakedQlpTracker;   //For migration
+    address public immutable oldFeeQlpTracker;      //For migration  
+
+    IVault public immutable vault;
+
+
 
 
     mapping(address => address) public pendingReceivers;
 
-    event StakeQlp(address account, uint256 amount);
-    event UnstakeQlp(address account, uint256 amount);
+    event StakeQlp(address indexed account, uint256 amount);
+    event UnstakeQlp(address indexed account, uint256 amount);
+    event StakeMigration(address indexed account, uint256 amount);
 
     receive() external payable {
         require(msg.sender == weth, "Router: invalid sender");
@@ -43,24 +50,23 @@ contract RewardRouter is ReentrancyGuard, Governable {
 
     constructor(
         address _weth,
-        address _qlp
+        address _qlp,
+        address _vault,
+        address _feeQlpTracker,
+        address _qlpManager,
+        address _oldStakedQlpTracker,
+        address _oldFeeQlpTracker
     ) public{
         weth = _weth;
-        qlp = _qlp;        
-    }
-
-    function initialize(
-        address _feeQlpTracker,
-	    address _stakedQlpTracker,
-        address _qlpManager
-    ) external onlyGov {
-        require(!isInitialized, "RewardRouter: already initialized");
-        isInitialized = true;
+        qlp = _qlp;
+        vault = IVault(_vault);    
 
         feeQlpTracker = _feeQlpTracker;
-	    stakedQlpTracker = _stakedQlpTracker;
 
         qlpManager = _qlpManager;
+
+        oldStakedQlpTracker = _oldStakedQlpTracker;
+        oldFeeQlpTracker = _oldFeeQlpTracker;  
 
     }
 
@@ -81,15 +87,26 @@ contract RewardRouter is ReentrancyGuard, Governable {
     ) external nonReentrant returns (uint256) {
         require(_amount > 0, "RewardRouter: invalid _amount");
 
-        address account = msg.sender;
-        uint256 qlpAmount = IQlpManager(qlpManager).addLiquidityForAccount(account, account, _token, _amount, _minUsdq, _minQlp);
+        return _mintAndStakeQlp(msg.sender,msg.sender,_token, _amount, _minUsdq, _minQlp);
+    }
+
+    function _mintAndStakeQlp(
+        address fundingAccount,
+        address account,
+        address _token,
+        uint256 _amount,
+        uint256 _minUsdq,
+        uint256 _minQlp
+    ) private returns (uint256) {
+
+        uint256 qlpAmount = IQlpManager(qlpManager).addLiquidityForAccount(fundingAccount, account, _token, _amount, _minUsdq, _minQlp);
         IRewardTracker(feeQlpTracker).stakeForAccount(account, account, qlp, qlpAmount);
-	    IRewardTracker(stakedQlpTracker).stakeForAccount(account, account, feeQlpTracker, qlpAmount);
 
         emit StakeQlp(account, qlpAmount);
 
         return qlpAmount;
     }
+
 
     function mintAndStakeQlpETH(uint256 _minUsdq, uint256 _minQlp) external payable nonReentrant returns (uint256) {
         require(msg.value > 0, "RewardRouter: invalid msg.value");
@@ -98,6 +115,7 @@ contract RewardRouter is ReentrancyGuard, Governable {
         return _mintAndStakeQlpETH(msg.value,_minUsdq, _minQlp);
     }
 
+    
     function _mintAndStakeQlpETH(uint256 _amount,uint256 _minUsdq, uint256 _minQlp) private returns (uint256) {
         require(_amount > 0, "RewardRouter: invalid _amount");
 
@@ -107,7 +125,6 @@ contract RewardRouter is ReentrancyGuard, Governable {
         uint256 qlpAmount = IQlpManager(qlpManager).addLiquidityForAccount(address(this), account, weth, _amount, _minUsdq, _minQlp);
 
         IRewardTracker(feeQlpTracker).stakeForAccount(account, account, qlp, qlpAmount);
-	    IRewardTracker(stakedQlpTracker).stakeForAccount(account, account, feeQlpTracker, qlpAmount);
 
         emit StakeQlp(account, qlpAmount);
 
@@ -123,7 +140,6 @@ contract RewardRouter is ReentrancyGuard, Governable {
         require(_qlpAmount > 0, "RewardRouter: invalid _qlpAmount");
 
         address account = msg.sender;
-	    IRewardTracker(stakedQlpTracker).unstakeForAccount(account, feeQlpTracker, _qlpAmount, account);
         IRewardTracker(feeQlpTracker).unstakeForAccount(account, qlp, _qlpAmount, account);
         uint256 amountOut = IQlpManager(qlpManager).removeLiquidityForAccount(account, _tokenOut, _qlpAmount, _minOut, _receiver);
 
@@ -140,7 +156,6 @@ contract RewardRouter is ReentrancyGuard, Governable {
         require(_qlpAmount > 0, "RewardRouter: invalid _qlpAmount");
 
         address account = msg.sender;
-	    IRewardTracker(stakedQlpTracker).unstakeForAccount(account, feeQlpTracker, _qlpAmount, account);
         IRewardTracker(feeQlpTracker).unstakeForAccount(account, qlp, _qlpAmount, account);
         uint256 amountOut = IQlpManager(qlpManager).removeLiquidityForAccount(account, weth, _qlpAmount, _minOut, address(this));
 
@@ -153,39 +168,64 @@ contract RewardRouter is ReentrancyGuard, Governable {
         return amountOut;
     }
 
-    function claim() external nonReentrant {
+    function claim(address _rewardToken, bool _shouldAddIntoQLP, bool withdrawEth) external nonReentrant {
+        require(IRewardTracker(feeQlpTracker).allTokens(_rewardToken), "RewardRouter: invalid _rewardToken");
         address account = msg.sender;
-
-        IRewardTracker(feeQlpTracker).claimForAccount(account, account);
-	IRewardTracker(stakedQlpTracker).claimForAccount(account, account);
+        if(_shouldAddIntoQLP && vault.whitelistedTokens(_rewardToken)){ 
+            uint256 amount = IRewardTracker(feeQlpTracker).claimForAccount(account, _rewardToken, address(this));
+            if(amount>0){
+                if(_rewardToken == weth){
+                    _mintAndStakeQlpETH(amount,0,0);
+                }else{
+                    IERC20(_rewardToken).approve(qlpManager, amount);
+                    _mintAndStakeQlp(address(this),account,_rewardToken,amount,0,0);
+                }
+            }   
+        }else if(withdrawEth && _rewardToken == weth){
+            uint256 amount = IRewardTracker(feeQlpTracker).claimForAccount(account, _rewardToken, address(this));
+            if(amount>0){
+                IWETH(weth).withdraw(amount);
+                payable(account).sendValue(amount);
+            }
+        }else{
+            IRewardTracker(feeQlpTracker).claimForAccount(account, _rewardToken, account);
+        }
     }
 
-    function claimFees() external nonReentrant {
+    function claimOldFees() external nonReentrant {
         address account = msg.sender;
-        IRewardTracker(feeQlpTracker).claimForAccount(account, account);
+        IRewardTrackerClaim(oldFeeQlpTracker).claimForAccount(account, account);
     }
+
 
     function handleRewards(
-        bool _shouldClaimWeth,
         bool _shouldConvertWethToEth,
         bool _shouldAddIntoQLP
     ) external nonReentrant {
         address account = msg.sender;
-
-        if (_shouldClaimWeth) {
-            if (_shouldConvertWethToEth || _shouldAddIntoQLP ) {
-                uint256 wethAmount = IRewardTracker(feeQlpTracker).claimForAccount(account, address(this));
-                
-
-                if(_shouldAddIntoQLP){
-                    _mintAndStakeQlpETH(wethAmount,0,0);
-                }else{
-                    IWETH(weth).withdraw(wethAmount);
-                    payable(account).sendValue(wethAmount);
-                }
-            } else {
-                IRewardTracker(feeQlpTracker).claimForAccount(account, account);
-            }
+        if (_shouldConvertWethToEth || _shouldAddIntoQLP ) {
+            (address[] memory tokens,uint256[] memory amounts) = IRewardTracker(feeQlpTracker).claimAllForAccount(account, address(this));
+            for (uint256 i = 0; i < tokens.length; i++) {
+                address token = tokens[i];
+                uint256 amount = amounts[i];
+                if(amount>0){
+                    if(_shouldAddIntoQLP && vault.whitelistedTokens(token)){ 
+                        if(token == weth){
+                            _mintAndStakeQlpETH(amount,0,0);
+                        }else{
+                            IERC20(token).approve(qlpManager, amount);
+                            _mintAndStakeQlp(address(this),account,token,amount,0,0);
+                        }
+                    }else if(_shouldConvertWethToEth && token == weth ){
+                        IWETH(weth).withdraw(amount);
+                        payable(account).sendValue(amount);
+                    }else{
+                        IERC20(token).safeTransfer(account, amount);
+                    }    
+                }         
+            }    
+        } else {
+            IRewardTracker(feeQlpTracker).claimAllForAccount(account, account);
         }
     }
 
@@ -202,20 +242,26 @@ contract RewardRouter is ReentrancyGuard, Governable {
         _validateReceiver(receiver);
         uint256 qlpAmount = IRewardTracker(feeQlpTracker).depositBalances(_sender, qlp);
         if (qlpAmount > 0) {
-	    IRewardTracker(stakedQlpTracker).unstakeForAccount(_sender, feeQlpTracker, qlpAmount, _sender);
             IRewardTracker(feeQlpTracker).unstakeForAccount(_sender, qlp, qlpAmount, _sender);
             IRewardTracker(feeQlpTracker).stakeForAccount(_sender, receiver, qlp, qlpAmount);
-	    IRewardTracker(stakedQlpTracker).stakeForAccount(receiver, receiver, feeQlpTracker, qlpAmount);
         }
     }
 
     function _validateReceiver(address _receiver) private view {
-        require(IRewardTracker(stakedQlpTracker).averageStakedAmounts(_receiver) == 0, "RewardRouter: stakedQlpTracker.averageStakedAmounts > 0");
-        require(IRewardTracker(stakedQlpTracker).cumulativeRewards(_receiver) == 0, "RewardRouter: stakedQlpTracker.cumulativeRewards > 0");
-
 	    require(IRewardTracker(feeQlpTracker).averageStakedAmounts(_receiver) == 0, "RewardRouter: feeQlpTracker.averageStakedAmounts > 0");
-        require(IRewardTracker(feeQlpTracker).cumulativeRewards(_receiver) == 0, "RewardRouter: feeQlpTracker.cumulativeRewards > 0");
+        require(!IRewardTracker(feeQlpTracker).hasCumulativeRewards(_receiver), "RewardRouter: feeQlpTracker.cumulativeRewards > 0");
+    }
 
+    function migrateStaking() external nonReentrant {
+        address account = msg.sender;
+        uint256 qlpAmount = IRewardTracker(oldFeeQlpTracker).depositBalances(account, qlp);
+        if (qlpAmount > 0) {
+            IRewardTracker(oldStakedQlpTracker).unstakeForAccount(account, oldFeeQlpTracker, qlpAmount, account);
+            IRewardTracker(oldFeeQlpTracker).unstakeForAccount(account, qlp, qlpAmount, account);            
+            IRewardTracker(feeQlpTracker).stakeForAccount(account, account, qlp, qlpAmount);
+            IRewardTrackerClaim(oldFeeQlpTracker).claimForAccount(account, account);
+            emit StakeMigration(account, qlpAmount);
+        }
     }
 
 

@@ -6,8 +6,8 @@ import "./RewardDistributor.sol";
 
 
 contract StakedQlpDistributor is RewardDistributor {
-    constructor(address _rewardToken, address _rewardTracker) public RewardDistributor(_rewardToken, _rewardTracker) {}
+    constructor(address _rewardTracker) public RewardDistributor(_rewardTracker) {}
 }
 contract FeeQlpDistributor is RewardDistributor {
-    constructor(address _rewardToken, address _rewardTracker) public RewardDistributor(_rewardToken, _rewardTracker) {}
+    constructor(address _rewardTracker) public RewardDistributor(_rewardTracker) {}
 }

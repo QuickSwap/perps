@@ -4,6 +4,7 @@ pragma solidity 0.6.12;
 
 import "../libraries/math/SafeMath.sol";
 import "../libraries/token/IERC20.sol";
+import "../libraries/utils/ReentrancyGuard.sol";
 
 import "../core/interfaces/IQlpManager.sol";
 
@@ -18,7 +19,6 @@ contract StakedQlp {
 
     address public qlp;
     IQlpManager public qlpManager;
-    address public stakedQlpTracker;
     address public feeQlpTracker;
 
     mapping (address => mapping (address => uint256)) public allowances;
@@ -28,12 +28,10 @@ contract StakedQlp {
     constructor(
         address _qlp,
         IQlpManager _qlpManager,
-        address _stakedQlpTracker,
         address _feeQlpTracker
     ) public {
         qlp = _qlp;
         qlpManager = _qlpManager;
-        stakedQlpTracker = _stakedQlpTracker;
         feeQlpTracker = _feeQlpTracker;
     }
 
@@ -63,7 +61,7 @@ contract StakedQlp {
     }
 
     function totalSupply() external view returns (uint256) {
-        return IERC20(stakedQlpTracker).totalSupply();
+        return IERC20(feeQlpTracker).totalSupply();
     }
 
     function _approve(address _owner, address _spender, uint256 _amount) private {
@@ -83,11 +81,9 @@ contract StakedQlp {
             qlpManager.lastAddedAt(_sender).add(qlpManager.cooldownDuration()) <= block.timestamp,
             "StakedQlp: cooldown duration not yet passed"
         );
-
-        IRewardTracker(stakedQlpTracker).unstakeForAccount(_sender, feeQlpTracker, _amount, _sender);
         IRewardTracker(feeQlpTracker).unstakeForAccount(_sender, qlp, _amount, _sender);
-
         IRewardTracker(feeQlpTracker).stakeForAccount(_sender, _recipient, qlp, _amount);
-        IRewardTracker(stakedQlpTracker).stakeForAccount(_recipient, _recipient, feeQlpTracker, _amount);
     }
+
+
 }
