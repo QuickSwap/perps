@@ -133,7 +133,7 @@ contract RewardDistributor is IRewardDistributor, ReentrancyGuard, Governable {
         lastDistributionTime[_rewardToken] = block.timestamp;
     }
 
-    function setTokensPerInterval(address _rewardToken, uint256 _amount) external onlyAdmin nonReentrant{
+    function setTokensPerInterval(address _rewardToken, uint256 _amount) external onlyAdmin {
         require(rewardTokens[_rewardToken], "RewardDistributor: invalid _rewardToken");
         require(lastDistributionTime[_rewardToken] != 0, "RewardDistributor: invalid lastDistributionTime");
         IRewardTracker(rewardTracker).updateRewards(_rewardToken);
@@ -151,7 +151,7 @@ contract RewardDistributor is IRewardDistributor, ReentrancyGuard, Governable {
         return tokensPerInterval[_rewardToken].mul(timeDiff);
     }
 
-    function distribute(address _rewardToken) external override nonReentrant returns (uint256) {
+    function distribute(address _rewardToken) external override returns (uint256) {
         require(msg.sender == rewardTracker, "RewardDistributor: invalid msg.sender");
         uint256 amount = pendingRewards(_rewardToken);
         if (amount == 0) {
