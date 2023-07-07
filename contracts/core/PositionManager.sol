@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 pragma solidity ^0.6.12;
 
@@ -332,7 +332,7 @@ contract PositionManager is BasePositionManager {
         if (!_isLong) { return; }
 
         // if the position size is not increasing, this is a collateral deposit
-        require(_sizeDelta > 0, "PositionManager: long deposit");
+        require(_sizeDelta != 0, "PositionManager: long deposit");
 
         IVault _vault = IVault(vault);
         (uint256 size, uint256 collateral, , , , , , ) = _vault.getPosition(_account, _collateralToken, _indexToken, _isLong);
@@ -358,7 +358,7 @@ contract PositionManager is BasePositionManager {
     ) private view{
         IVault _vault = IVault(vault);
         (uint256 size, , , , , , , uint lastIncreasedTime) = _vault.getPosition(_account, _collateralToken, _indexToken, _isLong);
-        require(size > 0, "PositionManager: empty position");
+        require(size != 0, "PositionManager: empty position");
         uint256 minDelayTime = partnerMinStayingOpenTime[_account]>0 ? partnerMinStayingOpenTime[_account] : minStayingOpenTime;
         require(lastIncreasedTime.add(minDelayTime) <= block.timestamp, "PositionManager: min delay not yet passed");
     }

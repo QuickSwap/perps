@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 pragma solidity ^0.6.12;
 
@@ -354,7 +354,7 @@ contract OrderBook is ReentrancyGuard, IOrderBook {
         require(_path.length == 2 || _path.length == 3, "OB: invalid _path.length");
         require(_path[0] != _path[_path.length - 1], "OB: invalid _path");
         require(_path[0] != usdq && _path[_path.length - 1] != usdq, "OB: invalid token");
-        require(_amountIn > 0, "OB: invalid _amountIn");
+        require(_amountIn != 0, "OB: invalid _amountIn");
         require(_executionFee >= minExecutionFee, "OB: insufficient execution fee");
 
         // always need this call because of mandatory executionFee user has to transfer in ETH

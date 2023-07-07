@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 pragma solidity 0.6.12;
 
@@ -180,7 +180,7 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
         uint256 length = IRewardDistributor(distributor).allRewardTokensLength();
         for (uint256 i = 0; i < length; i++) {
             address token = IRewardDistributor(distributor).allRewardTokens(i);
-            if(cumulativeRewards[_account][token]>0){
+            if(cumulativeRewards[_account][token] != 0){
                 return true;
             }
         }
@@ -275,7 +275,7 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
         uint256 tokenAmount = claimableReward[_account][_rewardToken];
         claimableReward[_account][_rewardToken] = 0;
 
-        if (tokenAmount > 0) {
+        if (tokenAmount != 0) {
             IERC20(_rewardToken).safeTransfer(_receiver, tokenAmount);
             emit Claim(_account, _rewardToken, tokenAmount);
         }
@@ -342,7 +342,7 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
         address _depositToken,
         uint256 _amount
     ) private {
-        require(_amount > 0, "RewardTracker: invalid _amount");
+        require(_amount != 0, "RewardTracker: invalid _amount");
         require(isDepositToken[_depositToken], "RewardTracker: invalid _depositToken");
 
         IERC20(_depositToken).safeTransferFrom(_fundingAccount, address(this), _amount);
@@ -362,7 +362,7 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
         uint256 _amount,
         address _receiver
     ) private {
-        require(_amount > 0, "RewardTracker: invalid _amount");
+        require(_amount != 0, "RewardTracker: invalid _amount");
         require(isDepositToken[_depositToken], "RewardTracker: invalid _depositToken");
 
         _updateRewardsAll(_account);
@@ -396,7 +396,7 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
 
         uint256 supply = totalSupply;
         uint256 _cumulativeRewardPerToken = cumulativeRewardPerToken[_rewardToken];
-        if (supply > 0 && blockReward > 0) {
+        if (supply != 0 && blockReward != 0) {
             _cumulativeRewardPerToken = _cumulativeRewardPerToken.add(blockReward.mul(PRECISION).div(supply));
             cumulativeRewardPerToken[_rewardToken] = _cumulativeRewardPerToken;
         }
@@ -420,7 +420,7 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
         claimableReward[_account][_rewardToken] = _claimableReward;
         previousCumulatedRewardPerToken[_account][_rewardToken] = _cumulativeRewardPerToken;
 
-        if (_claimableReward > 0 && stakedAmounts[_account] > 0) {
+        if (_claimableReward != 0 && stakedAmounts[_account] != 0) {
             uint256 nextCumulativeReward = cumulativeRewards[_account][_rewardToken].add(accountReward);
 
             averageStakedAmounts[_account] = averageStakedAmounts[_account].mul(cumulativeRewards[_account][_rewardToken]).div(nextCumulativeReward).add(

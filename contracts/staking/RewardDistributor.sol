@@ -1,24 +1,23 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 pragma solidity 0.6.12;
 
 import "../libraries/math/SafeMath.sol";
 import "../libraries/token/IERC20.sol";
 import "../libraries/token/SafeERC20.sol";
-import "../libraries/utils/ReentrancyGuard.sol";
 
 import "./interfaces/IRewardDistributor.sol";
 import "./interfaces/IRewardTracker.sol";
 import "../access/Governable.sol";
 
-contract RewardDistributor is IRewardDistributor, ReentrancyGuard, Governable {
+contract RewardDistributor is IRewardDistributor, Governable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     uint256 public constant MAX_ALL_REWARD_TOKENS = 10;
 
     address[] public override allRewardTokens;
-     mapping (address => bool) public override allTokens;    
+    mapping (address => bool) public override allTokens;    
 
     mapping (address => bool) public override rewardTokens;
 
@@ -35,6 +34,8 @@ contract RewardDistributor is IRewardDistributor, ReentrancyGuard, Governable {
 
     event Distribute(address rewardToken, uint256 amount);
     event TokensPerIntervalChange(address rewardToken, uint256 amount);
+    event AddRewardToken(address rewardToken);
+    event RemoveRewardToken(address rewardToken);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "RewardDistributor: forbidden");
@@ -73,25 +74,16 @@ contract RewardDistributor is IRewardDistributor, ReentrancyGuard, Governable {
     function addRewardToken(
         address _token
     ) external override onlyAdmin{
-        require(allRewardTokens.length<MAX_ALL_REWARD_TOKENS,"RewardDistributor: too many rewardTokens");
-
         if (!rewardTokens[_token]) {
-            bool isFound;
-            uint256 length = allRewardTokens.length;
-            for (uint256 i = 0; i < length; i++) {
-                if(allRewardTokens[i] == _token){
-                    isFound = true;
-                    break;
-                }
-            }
-            if(!isFound){
+            if (!allTokens[_token]) {
+                require(allRewardTokens.length < MAX_ALL_REWARD_TOKENS,"RewardDistributor: too many rewardTokens");
                 allRewardTokens.push(_token);
                 allTokens[_token] = true;
-            }    
+            }
             rewardTokens[_token] = true;
             rewardTokenCount++;
+            emit AddRewardToken(_token);
         }
-        
     }
 
     function removeRewardToken(
@@ -101,6 +93,7 @@ contract RewardDistributor is IRewardDistributor, ReentrancyGuard, Governable {
             require(tokensPerInterval[_token] == 0,"RewardDistributor: tokensPerInterval must be zero");
             delete rewardTokens[_token];
             rewardTokenCount--;
+            emit RemoveRewardToken(_token);
         }
     }
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 import "../libraries/math/SafeMath.sol";
 import "../libraries/token/IERC20.sol";
@@ -207,7 +207,7 @@ contract QlpManager is ReentrancyGuard, Governable, IQlpManager {
     }
 
     function _addLiquidity(address _fundingAccount, address _account, address _token, uint256 _amount, uint256 _minUsdq, uint256 _minQlp) private returns (uint256) {
-        require(_amount > 0, "QlpManager: invalid _amount");
+        require(_amount != 0, "QlpManager: invalid _amount");
 
         // calculate aum before buyUSDQ
         uint256 aumInUsdq = getAumInUsdq(true);
@@ -230,7 +230,7 @@ contract QlpManager is ReentrancyGuard, Governable, IQlpManager {
     }
 
     function _removeLiquidity(address _account, address _tokenOut, uint256 _qlpAmount, uint256 _minOut, address _receiver) private returns (uint256) {
-        require(_qlpAmount > 0, "QlpManager: invalid _qlpAmount");
+        require(_qlpAmount != 0, "QlpManager: invalid _qlpAmount");
         require(lastAddedAt[_account].add(cooldownDuration) <= block.timestamp, "QlpManager: cooldown duration not yet passed");
 
         // calculate aum before sellUSDQ

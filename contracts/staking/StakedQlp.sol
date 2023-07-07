@@ -1,10 +1,9 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 pragma solidity 0.6.12;
 
 import "../libraries/math/SafeMath.sol";
 import "../libraries/token/IERC20.sol";
-import "../libraries/utils/ReentrancyGuard.sol";
 
 import "../core/interfaces/IQlpManager.sol";
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 pragma solidity ^0.6.0;
 
@@ -132,9 +132,9 @@ contract BasePositionManager is IBasePositionManager, ReentrancyGuard, Governabl
     }
 
     function setMaxGlobalSizes(
-        address[] memory _tokens,
-        uint256[] memory _longSizes,
-        uint256[] memory _shortSizes
+        address[] calldata _tokens,
+        uint256[] calldata _longSizes,
+        uint256[] calldata _shortSizes
     ) external onlyAdmin {
         for (uint256 i = 0; i < _tokens.length; i++) {
             address token = _tokens[i];
