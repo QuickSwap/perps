@@ -180,7 +180,7 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
         uint256 length = IRewardDistributor(distributor).allRewardTokensLength();
         for (uint256 i = 0; i < length; i++) {
             address token = IRewardDistributor(distributor).allRewardTokens(i);
-            if(cumulativeRewards[_account][token] != 0){
+            if(cumulativeRewards[_account][token] > 0){
                 return true;
             }
         }
@@ -407,7 +407,7 @@ contract RewardTracker is IERC20, ReentrancyGuard, IRewardTracker, Governable {
             return;
         }
 
-        if (_account != address(0)) {
+        if (_account > address(0)) {
             _updateAccountRewards(_account, _rewardToken, _cumulativeRewardPerToken);
         }
     }

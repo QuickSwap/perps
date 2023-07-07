@@ -173,7 +173,7 @@ contract RewardRouter is ReentrancyGuard, Governable {
         address account = msg.sender;
         if(_shouldAddIntoQLP && vault.whitelistedTokens(_rewardToken)){ 
             uint256 amount = IRewardTracker(feeQlpTracker).claimForAccount(account, _rewardToken, address(this));
-            if(amount != 0){
+            if(amount > 0){
                 if(_rewardToken == weth){
                     _mintAndStakeQlpETH(amount,0,0);
                 }else{
@@ -183,7 +183,7 @@ contract RewardRouter is ReentrancyGuard, Governable {
             }   
         }else if(withdrawEth && _rewardToken == weth){
             uint256 amount = IRewardTracker(feeQlpTracker).claimForAccount(account, _rewardToken, address(this));
-            if(amount != 0){
+            if(amount > 0){
                 IWETH(weth).withdraw(amount);
                 payable(account).sendValue(amount);
             }
@@ -208,7 +208,7 @@ contract RewardRouter is ReentrancyGuard, Governable {
             for (uint256 i = 0; i < tokens.length; i++) {
                 address token = tokens[i];
                 uint256 amount = amounts[i];
-                if(amount != 0){
+                if(amount > 0){
                     if(_shouldAddIntoQLP && vault.whitelistedTokens(token)){ 
                         if(token == weth){
                             _mintAndStakeQlpETH(amount,0,0);
