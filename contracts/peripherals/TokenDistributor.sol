@@ -102,7 +102,7 @@ contract TokenDistributor is Ownable {
                 Reward[] memory oldRewards = claimableRewards[recipient];
                 delete(claimableRewards[recipient]);
                 for(uint256 j = 0; j < oldRewards.length; j++) {
-                    if(oldRewards[j].timestamp + bufferTime > currentDay ){
+                    if(oldRewards[j].timestamp + bufferTime >= currentDay ){
                         claimableRewards[recipient].push(oldRewards[j]);
                     }else{
                         unchecked {
@@ -141,7 +141,7 @@ contract TokenDistributor is Ownable {
             uint256 currentDay = (block.timestamp / 1 days) * 1 days;
             uint256 sumExpired = totalExpired;
             for(uint256 i = 0; i < length; i++) {
-                if(claimableRewards[recipient][i].timestamp + bufferTime > currentDay ){
+                if(claimableRewards[recipient][i].timestamp + bufferTime >= currentDay ){
                     unchecked {                        
                         claimableAmount += claimableRewards[recipient][i].amount;
                     }
@@ -179,7 +179,7 @@ contract TokenDistributor is Ownable {
             if(length > 0){
                 uint256 currentDay = (block.timestamp / 1 days) * 1 days;
                 for(uint256 i = 0; i < length; i++) {
-                    if(claimableRewards[_recipient][i].timestamp + bufferTime > currentDay ){
+                    if(claimableRewards[_recipient][i].timestamp + bufferTime >= currentDay ){
                         claimableAmount += claimableRewards[_recipient][i].amount;
                     }
                 }  
