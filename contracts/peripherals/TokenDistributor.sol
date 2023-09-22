@@ -10,48 +10,102 @@ contract TokenDistributor is Ownable {
     using SafeERC20 for IERC20;
 
 
-    IERC20 public immutable token;
+    uint256 public constant MAX_ALL_REWARD_TOKENS = 5;
+
+    address[] public  allRewardTokens;
+    mapping (address => bool) public  allTokens;    
+
+    mapping (address => bool) public  rewardTokens;
+
+    uint256 public  rewardTokenCount;
+
     uint256 public bufferTime = 4 weeks;
 
     struct Reward{
         uint256 timestamp;
         uint256 amount;
     }
-    mapping(address => Reward[]) public claimableRewards;
 
-    mapping(address => uint256) public duplicateCheck;
+    mapping(address => mapping(address => Reward[])) public  claimableRewards;  //account => token => reward[]
+
+    mapping(address => mapping(address => uint256)) public duplicateCheck;  // account => token => timestamp
 
     mapping(address => bool) public activeAccounts;
 
-    uint256 public totalReward;
-    uint256 public totalClaimed;
-    uint256 public totalExpired;
-    uint256 public totalExpiredWithdraw;
+    mapping(address => uint256) public totalReward;
+    mapping(address => uint256) public totalClaimed;
+    mapping(address => uint256) public totalExpired;
+    mapping(address => uint256) public totalExpiredWithdraw;
     
    
-    event CanClaim(address indexed recipient, uint256 amount, uint256 timestamp);
+    event CanClaim(address indexed recipient, address indexed token, uint256 amount, uint256 timestamp);
 
-    event ExpiredClaim(address indexed recipient, uint256 amount, uint256 timestamp);
+    event ExpiredClaim(address indexed recipient, address indexed token , uint256 amount, uint256 timestamp);
 
-    event HasClaimedWithTimestamp(address indexed recipient, uint256 amount, uint256 timestamp);
+    event HasClaimedWithTimestamp(address indexed recipient, address indexed token , uint256 amount, uint256 timestamp);
 
-    event HasClaimed(address indexed recipient, uint256 amount);
+    event HasClaimed(address indexed recipient, address indexed token , uint256 amount);
   
     event Withdrawal(address indexed token, address indexed recipient, uint256 amount);
 
-    event WithdrawalExpiredToken(address indexed recipient, uint256 amount);
+    event WithdrawalExpiredToken(address indexed token, address indexed recipient,  uint256 amount);
 
     event ActivateAccount(address indexed account, bool isActive);
 
+    event AddRewardToken(address rewardToken);
+
+    event RemoveRewardToken(address rewardToken);
+
     constructor(
-        IERC20 _token,
         address _owner
     ) Ownable() {
-        require(address(_token) != address(0), "TokenDistributor: zero token address");
         require(_owner != address(0), "TokenDistributor: zero owner address");
-
-        token = _token;
         _transferOwnership(_owner);
+    }
+
+    function allRewardTokensLength() external view returns (uint256) {
+        return allRewardTokens.length;
+    }
+
+    function getAllRewardTokens() external view returns (address[] memory) {
+        address[] memory tokens = new address[](rewardTokenCount);
+        uint256 index;
+        uint256 length = allRewardTokens.length;
+        for (uint256 i = 0; i < length; i++) {
+            address token = allRewardTokens[i];
+            if(!rewardTokens[token]){
+                continue;
+            }
+            tokens[index] = token;
+            index++;
+        }
+
+        return tokens;
+    }
+
+    function addRewardToken(
+        address _token
+    ) external onlyOwner{
+        if (!rewardTokens[_token]) {
+            if (!allTokens[_token]) {
+                require(allRewardTokens.length < MAX_ALL_REWARD_TOKENS,"TokenDistributor: too many rewardTokens");
+                allRewardTokens.push(_token);
+                allTokens[_token] = true;
+            }
+            rewardTokens[_token] = true;
+            rewardTokenCount++;
+            emit AddRewardToken(_token);
+        }
+    }
+
+    function removeRewardToken(
+        address _token
+    ) external onlyOwner{
+        if(rewardTokens[_token]){
+            delete rewardTokens[_token];
+            rewardTokenCount--;
+            emit RemoveRewardToken(_token);
+        }
     }
 
     function setBufferTime(uint256 _bufferTime) external onlyOwner {
@@ -59,16 +113,17 @@ contract TokenDistributor is Ownable {
         bufferTime = _bufferTime;
     }
 
-    function withdrawExpiredToken(address _receiver) external onlyOwner {
+    function withdrawExpiredToken(address _token, address _receiver ) external onlyOwner {
+        require(allTokens[_token], "TokenDistributor: invalid _token");
         require(_receiver != address(0), "TokenDistributor: zero receiver address");
-        require(totalExpired != 0, "TokenDistributor: totalExpired should be greater than zero");
-        uint256 amount = totalExpired;
-        totalExpired = 0;
+        require(totalExpired[_token] != 0, "TokenDistributor: totalExpired should be greater than zero");
+        uint256 amount = totalExpired[_token];
+        totalExpired[_token] = 0;
         unchecked {
-            totalExpiredWithdraw += amount;
+            totalExpiredWithdraw[_token] += amount;
         }
-        token.safeTransfer(_receiver, amount);
-        emit WithdrawalExpiredToken(_receiver, amount);
+        IERC20(_token).safeTransfer(_receiver, amount);
+        emit WithdrawalExpiredToken(_token, _receiver, amount);
     }    
 
     function withdrawEmergencyToken(IERC20 _token, address _receiver, uint256 _amount) external onlyOwner {
@@ -79,51 +134,52 @@ contract TokenDistributor is Ownable {
     }
 
 
-    function setRecipients(address[] calldata _recipients, uint256[] calldata _claimableAmount)
+    function setRecipients(address _token, address[] calldata _recipients, uint256[] calldata _claimableAmount)
         external
         onlyOwner
     {
+        require(rewardTokens[_token], "TokenDistributor: invalid _token");
         require(
             _recipients.length == _claimableAmount.length, "TokenDistributor: invalid array length"
         );
 
-        uint256 sumReward = totalReward;
-        uint256 sumExpired = totalExpired;
+        uint256 sumReward = totalReward[_token];
+        uint256 sumExpired = totalExpired[_token];
         uint256 currentDay = (block.timestamp / 1 days) * 1 days;
         for (uint256 i = 0; i < _recipients.length; i++) {
             address recipient = _recipients[i];
 
-            require(duplicateCheck[recipient] != currentDay,"TokenDistributor: recipient already set");
-            duplicateCheck[recipient] = currentDay;
+            require(duplicateCheck[recipient][_token] != currentDay,"TokenDistributor: recipient already set");
+            duplicateCheck[recipient][_token] = currentDay;
 
             uint256 claimableAmount = _claimableAmount[i];
-            uint256 length = claimableRewards[recipient].length;
-            if(length>0 && claimableRewards[recipient][0].timestamp + bufferTime < currentDay){
-                Reward[] memory oldRewards = claimableRewards[recipient];
-                delete(claimableRewards[recipient]);
+            uint256 length = claimableRewards[recipient][_token].length;
+            if(length>0 && claimableRewards[recipient][_token][0].timestamp + bufferTime < currentDay){
+                Reward[] memory oldRewards = claimableRewards[recipient][_token];
+                delete(claimableRewards[recipient][_token]);
                 for(uint256 j = 0; j < oldRewards.length; j++) {
                     if(oldRewards[j].timestamp + bufferTime >= currentDay ){
-                        claimableRewards[recipient].push(oldRewards[j]);
+                        claimableRewards[recipient][_token].push(oldRewards[j]);
                     }else{
                         unchecked {
                             sumExpired += oldRewards[j].amount;
                         }    
-                        emit ExpiredClaim(recipient, oldRewards[j].amount, oldRewards[j].timestamp);
+                        emit ExpiredClaim(recipient, _token, oldRewards[j].amount, oldRewards[j].timestamp);
                     }
                 }  
             }
 
-            claimableRewards[recipient].push(Reward(currentDay,claimableAmount));
-            emit CanClaim(recipient, claimableAmount, currentDay);
+            claimableRewards[recipient][_token].push(Reward(currentDay,claimableAmount));
+            emit CanClaim(recipient, _token, claimableAmount, currentDay);
             
             unchecked {
                 sumReward += claimableAmount;
             }
         }
-        require(token.balanceOf(address(this)) >= sumReward - totalExpiredWithdraw - totalClaimed, "TokenDistributor: not enough balance");
+        require(IERC20(_token).balanceOf(address(this)) >= sumReward - totalExpiredWithdraw[_token] - totalClaimed[_token], "TokenDistributor: not enough balance");
 
-        totalReward = sumReward;
-        totalExpired = sumExpired;
+        totalReward[_token] = sumReward;
+        totalExpired[_token] = sumExpired;
     }
 
     function activateAccount(bool _isActive) external  {
@@ -131,56 +187,87 @@ contract TokenDistributor is Ownable {
         emit ActivateAccount(msg.sender,_isActive);
     }
 
+    function claimAll() external  returns (address[] memory,uint256[] memory) {
+        uint256 length = allRewardTokens.length;
 
-    function claim() external {
+        address[] memory tokens = new address[](length);
+        uint256[] memory amounts = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            address token = allRewardTokens[i];
+            tokens[i] = token;
+            amounts[i] = claim(token);
+        }
+        return (tokens,amounts);
+    }
+
+
+    function claim(address _token) public returns (uint256) {
+        require(allTokens[_token], "TokenDistributor: invalid _token");
         address recipient = msg.sender;
         require(activeAccounts[recipient], "TokenDistributor: not active user");
-        uint256 length = claimableRewards[recipient].length;
+        uint256 length = claimableRewards[recipient][_token].length;
+        uint256 claimableAmount;
         if(length>0){
-            uint256 claimableAmount;
             uint256 currentDay = (block.timestamp / 1 days) * 1 days;
-            uint256 sumExpired = totalExpired;
+            uint256 sumExpired = totalExpired[_token];
             for(uint256 i = 0; i < length; i++) {
-                if(claimableRewards[recipient][i].timestamp + bufferTime >= currentDay ){
+                if(claimableRewards[recipient][_token][i].timestamp + bufferTime >= currentDay ){
                     unchecked {                        
-                        claimableAmount += claimableRewards[recipient][i].amount;
+                        claimableAmount += claimableRewards[recipient][_token][i].amount;
                     }
-                    emit HasClaimedWithTimestamp(recipient, claimableRewards[recipient][i].amount, claimableRewards[recipient][i].timestamp);
+                    emit HasClaimedWithTimestamp(recipient, _token, claimableRewards[recipient][_token][i].amount, claimableRewards[recipient][_token][i].timestamp);
                 }else{
                     unchecked {
-                        sumExpired += claimableRewards[recipient][i].amount;
+                        sumExpired += claimableRewards[recipient][_token][i].amount;
                     }    
-                    emit ExpiredClaim(recipient, claimableRewards[recipient][i].amount, claimableRewards[recipient][i].timestamp);
+                    emit ExpiredClaim(recipient, _token, claimableRewards[recipient][_token][i].amount, claimableRewards[recipient][_token][i].timestamp);
                 }
             }  
-            delete(claimableRewards[recipient]);
-            totalExpired = sumExpired;
+            delete(claimableRewards[recipient][_token]);
+            totalExpired[_token] = sumExpired;
             if(claimableAmount > 0){
                 unchecked {
-                    totalClaimed += claimableAmount;
+                    totalClaimed[_token] += claimableAmount;
                 }
-                token.safeTransfer(recipient, claimableAmount);
+                IERC20(_token).safeTransfer(recipient, claimableAmount);
             }
-            emit HasClaimed(recipient, claimableAmount);
-        }else{
-            revert("TokenDistributor: nothing to claim");
+            emit HasClaimed(recipient, _token, claimableAmount);
         }
+        
+        return claimableAmount;
 
     }
 
-    function claimable() external view returns (uint256) {
-        return _claimable(msg.sender);
+    function claimableAll() external view returns (address[] memory,uint256[] memory) {
+        uint256 length = allRewardTokens.length;
+
+        address[] memory tokens = new address[](length);
+        uint256[] memory amounts = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            address token = allRewardTokens[i];
+            tokens[i] = token;
+            amounts[i] = _claimable(token, msg.sender);
+        }
+        return (tokens,amounts);
     }
 
-    function _claimable(address _recipient) private view returns (uint256) {
+    function claimable(address _token) external view returns (uint256) {
+        return _claimable(_token, msg.sender);
+    }
+
+    function _claimable(address _token, address _recipient) private view returns (uint256) {
+        require(allTokens[_token], "TokenDistributor: invalid _token");
         uint256 claimableAmount;
+
         if(activeAccounts[_recipient]){
-            uint256 length = claimableRewards[_recipient].length;
+            uint256 length = claimableRewards[_recipient][_token].length;
             if(length > 0){
                 uint256 currentDay = (block.timestamp / 1 days) * 1 days;
                 for(uint256 i = 0; i < length; i++) {
-                    if(claimableRewards[_recipient][i].timestamp + bufferTime >= currentDay ){
-                        claimableAmount += claimableRewards[_recipient][i].amount;
+                    if(claimableRewards[_recipient][_token][i].timestamp + bufferTime >= currentDay ){
+                        claimableAmount += claimableRewards[_recipient][_token][i].amount;
                     }
                 }  
             }        
@@ -197,11 +284,11 @@ contract TokenDistributor is Ownable {
         return accountList;
     }
 
-    function getAccountsClaimable(address[] calldata _accounts) external view returns (uint256[] memory) {
+    function getAccountsClaimable(address _token, address[] calldata _accounts) external view returns (uint256[] memory) {
         require(_accounts.length > 0 , "TokenDistributor: invalid array length");
         uint256[] memory claimableList = new uint256[](_accounts.length);
         for (uint256 i = 0; i < _accounts.length; i++) {
-            claimableList[i] = _claimable(_accounts[i]);
+            claimableList[i] = _claimable(_token, _accounts[i]);
         }    
         return claimableList;
     }
